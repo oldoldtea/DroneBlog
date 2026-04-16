@@ -1,6 +1,9 @@
 ---
 title: ZeroMQ 消息中间件：PUB/SUB 与 PUSH/PULL 模式深度解析
 date: 2025-04-15 12:55:15
+categories:
+  - 分布式系统
+  - 消息队列
 tags:
   - 消息队列
   - 分布式系统

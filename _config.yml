@@ -13,7 +13,7 @@ timezone: 'Asia/Shanghai'
 
 # URL
 ## Set your site url here. For example, if you use GitHub Page, set url as 'https://username.github.io/project'
-url: http://example.com
+url: https://oldoldtea.github.io
 permalink: :year/:month/:day/:title/
 permalink_defaults:
 pretty_urls:
@@ -97,6 +97,39 @@ ignore:
 ## Plugins: https://hexo.io/plugins/
 ## Themes: https://hexo.io/themes/
 theme: hexo-theme-maple
+
+# RSS Feed Configuration
+## Docs: https://github.com/hexojs/hexo-generator-feed
+
+# Atom Feed (现代标准，兼容性最好)
+feed:
+  # 格式设置：Atom 格式
+  type: atom
+  path: atom.xml
+  # 内容设置
+  limit: 20
+  hub:
+  content: true
+  # 增强摘要兼容性：提供更长的摘要
+  content_limit: 500
+  content_limit_delim: ' '
+  # 排序设置
+  order_by: -date
+  # 图标和图片配置
+  icon: /favicon.ico
+  image: /images/avatar.jpg
+  # 自动发现和 SEO 优化
+  autodiscovery: true
+  # 元数据增强
+  description: '技术博客，分享 C++、网络编程、分布式系统、前端开发等技术实践'
+  language: zh-CN
+  copyright: '© 2026 OldOldTea. All rights reserved.'
+  # 模板和媒体配置
+  template:
+  # 内容过滤
+  filter_html: false
+  # 日期格式标准化
+  date_format: 'YYYY-MM-DDTHH:mm:ssZ'
 
 # Deployment
 ## Docs: https://hexo.io/docs/one-command-deployment

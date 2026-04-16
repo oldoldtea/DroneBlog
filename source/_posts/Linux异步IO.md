@@ -1,6 +1,9 @@
 ---
 title: Linux异步IO
 date: 2026-04-14 18:12:46
+categories:
+  - Linux
+  - 系统编程
 tags:
   - Linux
   - IO

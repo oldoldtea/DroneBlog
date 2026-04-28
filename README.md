@@ -85,3 +85,13 @@ hexo d
 - [Hexo 官方文档](https://hexo.io/docs/)
 - [Hexo 部署指南](https://hexo.io/docs/one-command-deployment)
 - [Hexo-Theme-Maple 官方说明](https://github.com/subat0m/hexo-theme-maple)
+
+## Star
+
+The easiest way to support developers is to click on the star (⭐) at the top of the page.
+
+<p style="text-align: center;">
+    <a href="https://api.star-history.com/svg?repos=oldoldtea/my_blog">
+        <img alt="start" width=50% src="https://api.star-history.com/svg?repos=oldoldtea/my_blog"/>
+    </a>
+</p>

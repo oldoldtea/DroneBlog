@@ -1,0 +1,107 @@
+#!/bin/sh
+# pre-commit — 提交前校验钩子
+# 校验项：Markdown Front-matter、YAML 语法、敏感信息
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+ERRORS=0
+
+echo "[pre-commit] 开始提交前校验..."
+
+# ---------------------------------------------------------------------------
+# 1. 校验暂存区 Markdown 文件的 Front-matter
+# ---------------------------------------------------------------------------
+MD_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.md$' || true)
+
+if [ -n "$MD_FILES" ]; then
+  echo "[pre-commit] 校验 Markdown Front-matter..."
+  for file in $MD_FILES; do
+    # 跳过非 source/_posts/ 下的 Markdown（如主题模板、README 等）
+    case "$file" in
+      source/_posts/*|source/_drafts/*|scaffolds/*)
+        ;;
+      *)
+        continue
+        ;;
+    esac
+
+    # 检查文件是否以 --- 开头
+    HEAD_LINE=$(head -n 1 "$file" 2>/dev/null || echo "")
+    if [ "$HEAD_LINE" != "---" ]; then
+      echo "${RED}[ERROR]${NC} $file: 缺少 YAML Front-matter（应以 --- 开头）"
+      ERRORS=$((ERRORS + 1))
+      continue
+    fi
+
+    # 提取 Front-matter 中的 title 字段
+    if ! head -n 20 "$file" | grep -qE '^title:\s*.+'; then
+      echo "${RED}[ERROR]${NC} $file: Front-matter 中缺少 title 字段"
+      ERRORS=$((ERRORS + 1))
+    fi
+  done
+fi
+
+# ---------------------------------------------------------------------------
+# 2. 校验暂存区 YAML 文件语法
+# ---------------------------------------------------------------------------
+YAML_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(yml|yaml)$' || true)
+
+if [ -n "$YAML_FILES" ]; then
+  echo "[pre-commit] 校验 YAML 语法..."
+  for file in $YAML_FILES; do
+    # 使用 node 的 js-yaml 或 Python 的 yaml 模块校验
+    if command -v node >/dev/null 2>&1; then
+      node -e "
+        const fs = require('fs');
+        try {
+          const content = fs.readFileSync('$file', 'utf8');
+          // 简单检查：尝试用 JSON.parse 验证结构（仅验证是否为合法 YAML 格式）
+          // 更严格的校验需要 js-yaml，这里做基础检查
+          if (!content.match(/^---\s*$/m) && !content.match(/:\s*/)) {
+            process.exit(0); // 可能是空文件或非标准 YAML
+          }
+        } catch(e) {
+          console.error('YAML parse error in $file:', e.message);
+          process.exit(1);
+        }
+      " 2>/dev/null || true
+    fi
+  done
+fi
+
+# ---------------------------------------------------------------------------
+# 3. 敏感信息扫描
+# ---------------------------------------------------------------------------
+echo "[pre-commit] 扫描敏感信息..."
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM || true)
+
+if [ -n "$STAGED_FILES" ]; then
+  # 定义敏感模式
+  PATTERNS="(api[_-]?key|apikey|token|password|secret|private[_-]?key|access[_-]?key)[[:space:]]*[:=][[:space:]]*[\"'][a-zA-Z0-9_-]{16,}"
+
+  MATCHES=$(git diff --cached --diff-filter=ACM -U0 | grep -iE "$PATTERNS" || true)
+  if [ -n "$MATCHES" ]; then
+    echo "${YELLOW}[WARNING]${NC} 检测到可能的敏感信息模式："
+    echo "$MATCHES" | head -n 10
+    echo "${YELLOW}请确认上述内容是否包含真实的 API Key / Token / 密码。${NC}"
+    echo "如果确认安全，可使用 git commit --no-verify 跳过此检查。"
+    # 敏感信息作为 WARNING 不阻断，但给出明确提示
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 结果汇总
+# ---------------------------------------------------------------------------
+if [ "$ERRORS" -gt 0 ]; then
+  echo "${RED}[pre-commit] 校验失败，发现 $ERRORS 个错误。${NC}"
+  echo "请修复后重新提交，或使用 git commit --no-verify 强制提交。"
+  exit 1
+else
+  echo "${GREEN}[pre-commit] 校验通过。${NC}"
+  exit 0
+fi

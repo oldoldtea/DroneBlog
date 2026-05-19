@@ -1,10 +1,9 @@
 ---
-title: Docker核心概念与容器化实践
+title: Docker 容器化实战入门：核心概念与工程实践
 date: 2026-05-18 16:59:13
 tags:
   - Docker
   - 容器化
-  - DevOps
 categories:
   - 云原生
 ---

@@ -1,12 +1,11 @@
 ---
-title: Linux异步IO
+title: Linux 异步 IO 原理剖析
 date: 2026-04-14 18:12:46
-categories:
-  - Linux
-  - 系统编程
 tags:
   - Linux
-  - IO
+  - 异步编程
+categories:
+  - 系统编程
 ---
 
 # Linux 异步 IO

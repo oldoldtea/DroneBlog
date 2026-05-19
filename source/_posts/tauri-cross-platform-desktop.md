@@ -1,11 +1,9 @@
 ---
-title: Tauri跨平台桌面应用开发指南
+title: Tauri 跨平台桌面应用开发指南
 date: 2026-05-18 17:27:23
 tags:
   - Tauri
-  - Rust
   - 桌面应用
-  - 跨平台
 categories:
   - 前端技术
 ---

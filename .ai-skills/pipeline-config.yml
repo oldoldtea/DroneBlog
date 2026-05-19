@@ -1,0 +1,353 @@
+# Pipeline Config — 声明式流水线配置
+# 本文件定义 AI 执行任务的阶段、检查项、失败策略和输出模板。
+# AI 应在加载 AGENTS.md 后读取本文件，并按此配置驱动执行流程。
+
+pipeline:
+  version: "1.1"
+  description: "DroneBlog 混合式流水线配置"
+
+  # --------------------------------------------------------------------------
+  # 阶段定义（Stage Definitions）
+  # --------------------------------------------------------------------------
+  stages:
+    - id: analysis
+      name: "需求分析"
+      required: true
+      description: "明确用户意图，归类任务类型，提取技术关键词"
+      task_types:
+        - id: content_creation
+          name: "内容创作"
+          triggers: ["写", "新建", "创作", "draft", "生成", "博客", "文章"]
+        - id: config_change
+          name: "配置调整"
+          triggers: ["改", "调整", "配置"]
+        - id: theme_custom
+          name: "主题定制"
+          triggers: ["主题", "样式", "模板", "布局"]
+        - id: debug_build
+          name: "问题排查"
+          triggers: ["报错", "失败", "错误", "修复", "debug"]
+        - id: deploy
+          name: "部署发布"
+          triggers: ["发布", "部署", "上线", "deploy"]
+
+    - id: skill_match
+      name: "Skill 识别"
+      required: true
+      description: "根据任务关键词动态匹配并加载相关 Skill。匹配不到时强制执行 find-skills 回退搜索，禁止跳过"
+      registry: "skills-registry.md"
+      checks:
+        - type: keyword_extraction
+          source: user_request
+          description: "从用户请求中提取技术关键词"
+        - type: local_registry_scan
+          source: extracted_keywords
+          target: skills-registry.md
+          description: "在本地注册表中查找匹配 Skill"
+        - type: find_skills_fallback
+          condition: "local_registry_scan 未匹配"
+          action: run_command
+          command: "npx skills find {keywords}"
+          description: "本地未匹配时，强制搜索 skills.sh 生态（不可跳过）"
+          required: true
+        - type: skill_load
+          condition: "匹配到 Skill"
+          action: read_skill_file
+          description: "读取匹配到的 SKILL.md 文件"
+
+    - id: execute
+      name: "执行流程"
+      required: true
+      description: "根据任务类型执行对应的子流程"
+      sub_stages:
+        - id: content_creation
+          triggers: ["content_creation"]
+          steps:
+            - id: validate_frontmatter
+              name: "确认 Front-matter"
+              action: check_yaml_header
+              required_fields: ["title", "date"]
+              optional_fields: ["tags", "categories"]
+              content_standards:
+                title_format: "{技术名} {内容类型}"
+                title_examples: ["C++ 核心特性深度解析", "Kafka 消息传输机制源码解析"]
+                tags_limit: "2-3 个"
+                tags_rule: "第1标签=核心技术/语言, 第2标签=主题方向, 第3标签(可选)=细分领域"
+                categories_rule: "单一分类，6 选 1: 后端开发 / 前端技术 / 系统编程 / 云原生 / 人工智能 / 分布式系统"
+            - id: validate_filename
+              name: "文件名规范检查"
+              action: check_filename
+              rule: "kebab_case_ascii_only"
+              naming_standards:
+                format: "{技术名缩写}-{内容主题}-{内容类型}.md"
+                case: "kebab-case (短横线连接小写字母)"
+                charset: "ASCII 仅，无空格、无中文、无特殊符号"
+                examples:
+                  - "cpp-core-features.md"
+                  - "react-hooks-deep-dive.md"
+                  - "kafka-message-transmission.md"
+                  - "docker-containerization-practice.md"
+                forbidden: ["中文文件名", "空格", "下划线", "驼峰命名", "无意义缩写"]
+            - id: write_file
+              name: "写入文件"
+              action: write_markdown
+              target_dir: "source/_posts/"
+            - id: build_verify
+              name: "构建验证"
+              action: run_command
+              command: "hexo clean && hexo generate"
+
+        - id: config_change
+          triggers: ["config_change"]
+          steps:
+            - id: backup_config
+              name: "修改前备份（建议）"
+              action: read_file
+              note: "读取当前配置内容，避免误删"
+            - id: validate_yaml
+              name: "YAML 语法检查"
+              action: check_yaml_syntax
+              indent: 2
+              use_spaces: true
+            - id: apply_change
+              name: "应用修改"
+              action: modify_file
+            - id: build_verify
+              name: "构建验证"
+              action: run_command
+              command: "hexo clean && hexo generate"
+
+        - id: theme_custom
+          triggers: ["theme_custom"]
+          steps:
+            - id: check_theme_config
+              name: "优先检查主题配置"
+              action: read_file
+              target: "themes/hexo-theme-maple/_config.yml"
+            - id: modify_template
+              name: "修改模板（如需）"
+              action: modify_file
+              note: "定位 layout/ 下对应 EJS 文件"
+            - id: build_verify
+              name: "构建验证"
+              action: run_command
+              command: "hexo generate"
+
+        - id: debug_build
+          triggers: ["debug_build"]
+          steps:
+            - id: clean_cache
+              name: "清理缓存"
+              action: run_command
+              command: "hexo clean"
+            - id: check_logs
+              name: "查看错误日志"
+              action: run_command
+              command: "hexo generate --debug"
+            - id: fix_issue
+              name: "修复问题"
+              action: modify_file
+            - id: rebuild_verify
+              name: "修复后验证"
+              action: run_command
+              command: "hexo generate"
+
+        - id: deploy
+          triggers: ["deploy"]
+          steps:
+            - id: pre_deploy_check
+              name: "构建前检查"
+              action: confirm_no_unsaved_changes
+            - id: build
+              name: "执行构建"
+              action: run_command
+              command: "hexo clean && hexo generate"
+            - id: local_preview
+              name: "本地预览（可选）"
+              action: run_command
+              command: "hexo server"
+              optional: true
+            - id: deploy
+              name: "执行部署"
+              action: run_command
+              command: "hexo deploy"
+              note: "仅在用户明确要求时执行"
+
+    - id: compliance_audit
+      name: "流程合规审核"
+      required: true
+      description: "在进入下一阶段前，审核上一阶段是否已合规完成。任何流程违规必须在此阶段识别并触发重新执行"
+      checks:
+        - id: verify_prev_stage_signal
+          name: "验证上一阶段合规信号"
+          action: check_log_signal
+          description: "检查 .ai-pipeline.log 中上一阶段必须包含 [OK] 标记。若缺失，标记为流程违规"
+          required: true
+        - id: detect_violation
+          name: "违规检测"
+          action: scan_patterns
+          patterns:
+            - "流程违规"
+            - "find-skills 回退搜索未执行"
+            - "阶段标记未输出"
+            - "日志未写入"
+          description: "扫描历史执行记录中是否存在已知的流程违规模式"
+        - id: re_execute_on_violation
+          name: "违规时重新执行"
+          action: rerun_stage
+          condition: "检测到流程违规"
+          description: "若检测到上一阶段存在流程违规，中止当前流水线，从违规阶段开始重新按规范执行"
+          required: true
+
+    - id: security
+      name: "安全审查"
+      required: true
+      description: "每次修改完成后的必做检查"
+      checks:
+        - id: scan_secrets
+          name: "敏感信息扫描"
+          action: scan_patterns
+          patterns:
+            - "api[_-]?key"
+            - "token"
+            - "password"
+            - "secret"
+            - "private[_-]?key"
+        - id: check_gitignore
+          name: "检查 .gitignore"
+          action: verify_gitignore
+          required_entries:
+            - ".ai-skills/"
+            - ".ai-pipeline.log"
+            - "node_modules/"
+            - "public/"
+        - id: validate_links
+          name: "链接可信度检查（建议）"
+          action: check_external_links
+          optional: true
+
+    - id: output
+      name: "输出规范"
+      required: true
+      description: "任务收尾，向用户汇报结果"
+      template: "default_report"
+
+  # --------------------------------------------------------------------------
+  # 阶段间信号机制（Stage Gate Protocol）
+  # --------------------------------------------------------------------------
+  stage_gate:
+    description: "每个阶段完成后必须向下一个阶段发送合规完成信号"
+    protocol:
+      - stage: analysis
+        signal_required: true
+        signal_format: "[OK] [analysis] 需求分析 completed"
+        next_stage: skill_match
+      - stage: skill_match
+        signal_required: true
+        signal_format: "[OK] [skill_match] Skill 识别 completed"
+        next_stage: execute
+        special_rules:
+          - rule: "find_skills_fallback 强制触发"
+            description: "若本地注册表未匹配，必须执行 find-skills 回退搜索，并在日志中记录执行结果"
+            violation_action: "标记为流程违规，触发 compliance_audit 阶段"
+      - stage: execute
+        signal_required: true
+        signal_format: "[OK] [execute] 执行流程 completed"
+        next_stage: compliance_audit
+      - stage: compliance_audit
+        signal_required: true
+        signal_format: "[OK] [compliance_audit] 流程合规审核 completed"
+        next_stage: security
+      - stage: security
+        signal_required: true
+        signal_format: "[OK] [security] 安全审查 completed"
+        next_stage: output
+      - stage: output
+        signal_required: true
+        signal_format: "[OK] [output] 输出规范 completed"
+        next_stage: "TASK_COMPLETE"
+
+  # --------------------------------------------------------------------------
+  # 失败与回滚策略
+  # --------------------------------------------------------------------------
+  failure_policy:
+    max_retries: 3
+    on_exceeded: rollback
+    log_file: ".ai-pipeline.log"
+    abort_keywords: ["stop", "abort", "取消"]
+    compliance_violation:
+      description: "流程违规时的处理策略"
+      on_detected: "立即中止当前流水线，从违规阶段重新开始执行"
+      log_entry: "[FAIL] [{stage}] 流程违规 detected: {reason}. 触发重新执行。"
+      max_re_execute: 2
+
+  # --------------------------------------------------------------------------
+  # 输出模板
+  # --------------------------------------------------------------------------
+  output_templates:
+    default_report:
+      sections:
+        - id: summary
+          name: "修改摘要"
+          required: true
+        - id: file_list
+          name: "文件清单"
+          required: true
+          columns:
+            - operation
+            - path
+        - id: validation_result
+          name: "验证结果"
+          required: true
+          format: "✅ / ❌"
+        - id: skill_match_result
+          name: "Skill 匹配结果"
+          required: true
+          description: "汇报本次任务匹配到的 Skill，或说明无匹配"
+        - id: loaded_skills
+          name: "已加载 Skill"
+          required: false
+        - id: next_steps
+          name: "后续建议"
+          required: true
+
+  # --------------------------------------------------------------------------
+  # 日志规范
+  # --------------------------------------------------------------------------
+  logging:
+    file: ".ai-pipeline.log"
+    format: "[{timestamp}] [{status}] [{stage}] {message}"
+    statuses:
+      - START
+      - OK
+      - FAIL
+      - ROLLBACK
+      - ABORT
+    append_only: true
+    git_ignored: true
+
+  # --------------------------------------------------------------------------
+  # Git 提交规范（供 Hooks 参考）
+  # --------------------------------------------------------------------------
+  git_commit:
+    language: "zh"
+    categories:
+      - id: post
+        prefix: "[文章]"
+        paths: ["source/_posts/"]
+      - id: config
+        prefix: "[配置]"
+        paths: ["_config.yml", "themes/*/ _config.yml"]
+      - id: theme
+        prefix: "[主题]"
+        paths: ["themes/"]
+      - id: docs
+        prefix: "[文档]"
+        paths: ["README.md", "AGENTS.md"]
+      - id: deps
+        prefix: "[依赖]"
+        paths: ["package.json", "package-lock.json"]
+      - id: fix
+        prefix: "[修复]"
+        paths: []
+    format: "{prefix} {description}"

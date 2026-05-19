@@ -1,13 +1,11 @@
 ---
-title: RawSocket (原始套接字) 技术原理与应用深度解析
+title: Raw Socket 网络编程深度解析
 date: 2025-02-15 10:41:15
-categories:
-  - 网络编程
-  - 操作系统
 tags:
   - 网络编程
-  - 操作系统
-  - TCP/IP 协议栈
+  - 底层协议
+categories:
+  - 系统编程
 ---
 
 ## 1. 概述 (Introduction)

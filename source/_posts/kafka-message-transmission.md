@@ -1,9 +1,11 @@
 ---
-title: Kafka消息传输机制与源码解析
+title: Kafka 消息传输机制源码解析
 date: 2026-04-14 18:12:46
 tags:
   - Kafka
   - 源码解析
+categories:
+  - 分布式系统
 ---
 
 # Kafka 消息传输机制与源码解析

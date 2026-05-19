@@ -1,0 +1,33 @@
+#!/bin/sh
+# pre-push — 推送前轻量检查
+# 职责：检查推送目标，对部署仓库给出提醒，不执行耗时构建
+
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+remote="$1"
+url="$2"
+
+# 获取当前推送的分支
+local_ref=$(git rev-parse --abbrev-ref HEAD)
+
+# 检查是否是部署目标仓库（oldoldtea.github.io）
+case "$url" in
+  *oldoldtea.github.io*)
+    echo "${YELLOW}[pre-push] 检测到部署目标仓库推送。${NC}"
+    echo "[pre-push] 提示: 部署应使用 'hexo deploy' 而非直接 git push。"
+    echo "[pre-push] 如需直接推送，请使用: git push --no-verify"
+    # 不阻塞，仅提醒
+    exit 0
+    ;;
+esac
+
+# 普通源码推送：检查是否有未提交的 hexo 相关变更
+# 如果 public/ 目录存在且未忽略，给出警告
+if [ -d "public" ] && ! git check-ignore -q public 2>/dev/null; then
+  echo "${YELLOW}[WARNING]${NC} public/ 目录未被 .gitignore 忽略，建议检查。"
+fi
+
+echo "${GREEN}[pre-push] 推送检查通过。${NC}"
+exit 0

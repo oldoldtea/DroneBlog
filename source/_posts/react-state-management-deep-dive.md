@@ -1,16 +1,11 @@
 ---
-title: 前端状态管理深度对标：Redux (RTK) vs MobX 6 架构与实战 (Hooks 篇)
+title: React 状态管理深度解析：Redux vs MobX 架构与实战
 date: 2025-05-15 12:49:56
-categories:
-  - 前端开发
-  - 状态管理
 tags:
-  - 前端工程化
-  - 状态管理
-  - MobX
-  - Redux
   - React
-  - Hooks
+  - 状态管理
+categories:
+  - 前端技术
 ---
 
 ## 1. 概述 (Overview)

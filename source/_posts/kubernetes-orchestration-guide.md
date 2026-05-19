@@ -1,12 +1,11 @@
 ---
-title: Kubernetes核心概念与实战入门
+title: Kubernetes 容器编排实战入门
 date: 2026-05-18 17:00:00
 tags:
   - Kubernetes
   - 容器编排
-  - 云原生
 categories:
-  - 云原生技术
+  - 云原生
 ---
 
 ## 引言

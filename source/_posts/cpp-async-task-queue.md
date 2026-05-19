@@ -1,15 +1,11 @@
 ---
-title: 异步任务队列：通往 Tokio 的终极优化——Work-Stealing 与 Timer Wheel
+title: C++ 异步任务队列：Work-Stealing 与 Timer Wheel 原理剖析
 date: 2025-12-15 14:22:22
-categories:
-  - C++
-  - 高并发
 tags:
   - C++
-  - 高并发
-  - ZeroMQ
-  - Work-Stealing
-  - Timer-Wheel
+  - 并发编程
+categories:
+  - 系统编程
 ---
 
 ## 1. 深度优化背景 (The Road to Tokio)

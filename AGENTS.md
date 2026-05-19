@@ -1,4 +1,4 @@
-# AGENTS.md — OldOldTea Blog
+# AGENTS.md — DroneBlog
 
 > 本文件面向 AI 编程助手。如果你正在阅读此文件，说明你被期望在此 Hexo 博客项目上进行修改、添加内容或排查问题。以下信息均基于项目实际内容，请勿凭假设操作。
 >
@@ -13,7 +13,7 @@
 
 这是一个基于 [Hexo](https://hexo.io/) 框架搭建的静态博客，站点语言为**简体中文**，使用主题 [hexo-theme-maple](https://github.com/xbmlz/hexo-theme-maple)。
 
-- **站点标题**：牛马日志
+- **站点标题**：DroneBlog
 - **作者**：OldOldTea
 - **部署目标**：GitHub Pages (`https://oldoldtea.github.io`)
 - **Hexo 版本**：`8.1.1`

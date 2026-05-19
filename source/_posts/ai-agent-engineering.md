@@ -1,11 +1,9 @@
 ---
-title: AI 配套知识体系：从 LLM 到 Agent 的工程化实践
+title: AI Agent 工程化实践：从 LLM 到智能体生态
 date: 2026-05-15 18:00:00
 tags:
   - AI
-  - LLM
   - Agent
-  - 工程化
 categories:
   - 人工智能
 ---

@@ -1,14 +1,11 @@
 ---
-title: TOML 解析器：基于模板与宏的通用配置框架 (Generic TOML Handler)
+title: TOML 解析器设计与实现：基于 C++ 模板的配置框架
 date: 2026-04-15 15:14:03
-categories:
-  - C++
-  - 配置管理
 tags:
   - C++
-  - TOML
   - 配置管理
-  - 模板编程
+categories:
+  - 后端开发
 ---
 
 ## 1. 概述 (Overview)

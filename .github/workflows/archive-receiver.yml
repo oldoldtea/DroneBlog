@@ -1,0 +1,103 @@
+name: Archive Receiver
+
+'on':
+  repository_dispatch:
+    types: [archive-blog]
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout DroneBlog
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.ARCHIVE_PAT }}
+
+      - name: Parse archive payload
+        id: payload
+        run: |
+          echo "source_repo=${{ github.event.client_payload.source_repo }}" >> $GITHUB_OUTPUT
+          echo "source_branch=${{ github.event.client_payload.source_branch }}" >> $GITHUB_OUTPUT
+          echo "commit_sha=${{ github.event.client_payload.commit_sha }}" >> $GITHUB_OUTPUT
+          echo "article_title=${{ github.event.client_payload.article_title }}" >> $GITHUB_OUTPUT
+          echo "article_slug=${{ github.event.client_payload.article_slug }}" >> $GITHUB_OUTPUT
+          echo "article_date=${{ github.event.client_payload.article_date }}" >> $GITHUB_OUTPUT
+          echo "article_tags=${{ github.event.client_payload.article_tags }}" >> $GITHUB_OUTPUT
+          echo "article_categories=${{ github.event.client_payload.article_categories }}" >> $GITHUB_OUTPUT
+          echo "content_base64=${{ github.event.client_payload.content_base64 }}" >> $GITHUB_OUTPUT
+
+      - name: Write pipeline log
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S+08:00")
+          {
+            echo ""
+            echo "# [Archive] Cross-repo pipeline log"
+            echo "[$TIMESTAMP] [START] [archive] Archive received from ${{ steps.payload.outputs.source_repo }}"
+            echo "[$TIMESTAMP] [INFO] [archive] Source: ${{ steps.payload.outputs.source_repo }}@${{ steps.payload.outputs.commit_sha }}"
+            echo "[$TIMESTAMP] [INFO] [archive] Article: ${{ steps.payload.outputs.article_title }}"
+            echo "[$TIMESTAMP] [INFO] [archive] Slug: ${{ steps.payload.outputs.article_slug }}"
+          } >> .ai-pipeline.log
+
+      - name: Decode and write article
+        run: |
+          mkdir -p source/_posts
+          echo "${{ steps.payload.outputs.content_base64 }}" | base64 -d > "source/_posts/${{ steps.payload.outputs.article_slug }}.md"
+
+      - name: Validate Front-matter
+        run: |
+          FILE="source/_posts/${{ steps.payload.outputs.article_slug }}.md"
+          HEAD=$(head -n 1 "$FILE")
+          if [ "$HEAD" != "---" ]; then
+            echo "ERROR: Missing YAML Front-matter"
+            exit 1
+          fi
+          if ! head -n 20 "$FILE" | grep -qE '^title:\s*.+'; then
+            echo "ERROR: Missing title field"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build verification
+        run: |
+          npx hexo clean
+          npx hexo generate
+
+      - name: Write pipeline log - success
+        if: success()
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S+08:00")
+          echo "[$TIMESTAMP] [OK] [archive] Build verification passed" >> .ai-pipeline.log
+
+      - name: Write pipeline log - failure
+        if: failure()
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S+08:00")
+          echo "[$TIMESTAMP] [FAIL] [archive] Build verification failed" >> .ai-pipeline.log
+
+      - name: Commit and push
+        if: success()
+        run: |
+          git config user.name "Archive Bot"
+          git config user.email "archive@droneblog.io"
+          git add source/_posts/ .ai-pipeline.log
+          git commit -m "[归档] ${{ steps.payload.outputs.article_title }} (from ${{ steps.payload.outputs.source_repo }})"
+          git push
+
+      - name: Write pipeline log - complete
+        if: always()
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S+08:00")
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "[$TIMESTAMP] [OK] [archive] Archive completed and committed" >> .ai-pipeline.log
+          else
+            echo "[$TIMESTAMP] [FAIL] [archive] Archive failed: ${{ job.status }}" >> .ai-pipeline.log
+          fi

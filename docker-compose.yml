@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  droneblog-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: droneblog-mcp-test
+    environment:
+      - DRONEBLOG_DIR=/test-blog
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DRONEBLOG_MODEL=gpt-4o-mini
+      - DRONEBLOG_TEMPERATURE=0.7
+    volumes:
+      - ./source/_posts:/test-blog/source/_posts:ro
+      - ./_config.yml:/test-blog/_config.yml:ro
+      - ./scaffolds:/test-blog/scaffolds:ro
+    ports:
+      - "8765:8765"
+    command: droneblog-mcp serve --transport sse
+    healthcheck:
+      test: ["CMD", "droneblog-mcp", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # 测试服务：运行 MCP Server 测试
+  droneblog-mcp-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: droneblog-mcp-test-runner
+    environment:
+      - DRONEBLOG_DIR=/test-blog
+    volumes:
+      - ./source/_posts:/test-blog/source/_posts:ro
+      - ./_config.yml:/test-blog/_config.yml:ro
+      - ./scaffolds:/test-blog/scaffolds:ro
+      - ./tests:/tests:ro
+    command: >
+      sh -c "
+        echo '=== 等待 MCP Server 启动 ===' &&
+        sleep 3 &&
+        echo '=== 运行测试 ===' &&
+        python /tests/docker-test.py
+      "
+    depends_on:
+      - droneblog-mcp
+    profiles:
+      - test

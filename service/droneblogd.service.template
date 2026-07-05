@@ -1,0 +1,32 @@
+[Unit]
+Description=DroneBlog Pipeline Service
+Documentation=https://github.com/oldoldtea/DroneBlog
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={{DRONEBLOG_DIR}}/service/droneblogd.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+
+# 环境变量
+Environment="DRONEBLOG_DIR={{DRONEBLOG_DIR}}"
+Environment="DRONEBLOG_PORT=8765"
+
+# 从文件加载 API Key（更安全，权限设为 600）
+EnvironmentFile=-{{HOME}}/.config/droneblogd/env
+
+# 工作目录
+WorkingDirectory={{DRONEBLOG_DIR}}
+
+# 日志输出到 journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=droneblogd
+
+# 资源限制
+LimitNOFILE=65536
+
+[Install]
+WantedBy=default.target

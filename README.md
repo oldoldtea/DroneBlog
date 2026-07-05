@@ -78,6 +78,74 @@ hexo new post "我的第一篇文章"
 
 ---
 
+## 🔌 MCP Server（命令行工具）
+
+本项目已封装为 **MCP (Model Context Protocol) Server**，支持通过 Claude Desktop、Cursor 等 MCP 客户端调用，实现 AI 驱动的博客管理。
+
+### 快速安装
+
+```bash
+# 一键配置环境（自动创建 Python 3.11 虚拟环境并安装）
+bin/setup-mcp-env.sh
+
+# 激活虚拟环境
+source .venv/bin/activate
+
+# 验证安装
+droneblog-mcp version
+```
+
+### 环境配置
+
+```bash
+# 必需
+export DRONEBLOG_DIR=/path/to/your/blog
+export OPENAI_API_KEY=sk-...
+
+# 可选
+export DRONEBLOG_MODEL=gpt-4o-mini
+export DRONEBLOG_TEMPERATURE=0.7
+```
+
+### 命令行使用
+
+```bash
+droneblog-mcp status        # 查看流水线状态
+droneblog-mcp serve         # 启动 MCP Server（stdio 模式）
+droneblog-mcp serve --transport sse  # 启动 SSE 模式
+```
+
+### Claude Desktop 配置
+
+编辑 `~/Library/Application Support/Claude/claude_desktop_config.json`：
+
+```json
+{
+  "mcpServers": {
+    "droneblog": {
+      "command": "python3",
+      "args": ["-m", "droneblog_mcp"],
+      "env": {
+        "DRONEBLOG_DIR": "/path/to/your/blog",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
+```
+
+### 可用功能
+
+- **11 个 Tools**: `blog_generate`, `blog_list`, `blog_read`, `blog_edit`, `blog_delete`, `config_get`, `config_set`, `build`, `deploy`, `pipeline_status`, `pipeline_run`
+- **5 个 Resources**: `blog://`, `config://site`, `config://theme`, `pipeline://log`, `blog://list`
+- **3 个 Prompts**: `blog_writing`, `tech_analysis`, `blog_idea_generator`
+
+详见 `droneblog_mcp/USAGE.md`
+
+---
+
+---
+
 ## 📦 打包与发布
 
 ### 常用命令
@@ -113,6 +181,16 @@ my_blog/
 │   └── hexo-theme-maple/    # 当前主题目录
 ├── public/                  # 生成的静态站点（hexo generate 输出）
 ├── .deploy_git/             # 部署临时仓库（hexo-deployer-git 使用）
+├── droneblog_mcp/           # MCP Server（AI 驱动的博客管理工具）
+│   ├── src/                 # 源码目录
+│   ├── dist/                # 构建输出（wheel 包）
+│   ├── pyproject.toml       # Python 项目配置
+│   ├── README.md            # MCP Server 说明
+│   └── USAGE.md             # 使用指南
+├── bin/                     # 脚本工具
+│   ├── droneblog-pipeline.sh
+│   ├── generate-and-archive.sh
+│   └── setup-mcp-env.sh     # MCP 环境一键配置脚本
 ├── _config.yml              # 站点核心配置
 ├── package.json             # 项目依赖与脚本
 ├── AGENTS.md                # ⬅️ AI 助手工作指南（面向 AI 编程助手）
@@ -128,8 +206,10 @@ my_blog/
 | `AGENTS.md` | AI 助手工作指南（流水线、Skill 管理、安全规范等） |
 | `.ai-skills/` | AI Skill 存储目录（按需加载的领域知识文件） |
 | `.ai-pipeline.log` | AI 流水线执行日志（追加写，记录阶段状态与失败信息） |
+| `droneblog_mcp/` | MCP Server 源码（AI 驱动的博客管理工具） |
+| `bin/setup-mcp-env.sh` | MCP 环境一键配置脚本 |
 
-> 以上 AI 相关文件均已被 `.gitignore` 排除，不纳入 Git 版本控制，也不参与 Hexo 静态构建。
+> 以上 AI 相关文件（除 `droneblog_mcp/` 源码外）均已被 `.gitignore` 排除，不纳入 Git 版本控制，也不参与 Hexo 静态构建。
 
 ## ✍️ 文章规范（Front-matter）
 

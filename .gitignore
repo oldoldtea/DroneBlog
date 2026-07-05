@@ -8,6 +8,18 @@ public/
 _multiconfig.yml
 .ai-pipeline.log
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.venv/
+venv/
+ENV/
+
 # AI 流水线配置（纳入版本控制）
 !.ai-skills/pipeline-config.yml
 !.ai-skills/pipeline-executor.md

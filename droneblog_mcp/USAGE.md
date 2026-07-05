@@ -124,6 +124,16 @@ export DRONEBLOG_AUTO_CONFIRM=false          # 是否跳过人工审核（可选
 droneblog-mcp version
 ```
 
+### 初始化 GitHub 绑定
+
+```bash
+# 本地模式（手动 hexo deploy）
+droneblog-mcp setup --token ghp_xxx --mode local
+
+# 同步归档模式（GitHub Actions 自动部署）
+droneblog-mcp setup --token ghp_xxx --mode sync
+```
+
 ### 查看状态
 
 ```bash
@@ -148,11 +158,15 @@ droneblog-mcp serve --transport sse
 droneblog-mcp serve --dir /path/to/blog
 ```
 
-## 可用 Tools（11 个）
+## 可用 Tools（15 个）
 
 | Tool | 功能 | 示例参数 |
 |------|------|----------|
-| `blog_generate` | 生成博客文章 | `{"topic": "C++20 协程", "category": "系统编程", "tags": ["C++", "协程", "异步编程"]}` |
+| `setup_init` | 初始化 GitHub 绑定 | `{"token": "ghp_xxx", "mode": "local"}` |
+| `setup_status` | 查看绑定状态 | `{}` |
+| `setup_sync_posts` | 同步文章到 GitHub | `{}` |
+| `setup_update_config` | 更新配置 | `{"github_token": "ghp_xxx", "sync_mode": "sync"}` |
+| `blog_generate` | 生成博客文章 | `{"topic": "C++20 协程", "category": "系统编程", "tags": ["C++", "协程", "异步编程"], "auto_deploy": false}` |
 | `blog_list` | 列出文章 | `{"category": "后端开发", "limit": 10}` |
 | `blog_read` | 读取文章 | `{"slug": "tokio-async-runtime"}` |
 | `blog_edit` | 编辑文章 | `{"slug": "xxx", "title": "新标题", "tags": ["新标签1", "新标签2"]}` |
@@ -233,17 +247,22 @@ droneblog_mcp/
 │       ├── __main__.py         # CLI 入口
 │       ├── server.py           # MCP Server 主类
 │       ├── tools/
+│       │   ├── setup.py        # GitHub 绑定工具
 │       │   ├── blog.py         # 文章相关工具
 │       │   ├── config.py       # 配置相关工具
 │       │   ├── build.py        # 构建部署工具
 │       │   └── pipeline.py     # 流水线工具
 │       ├── core/
+│       │   ├── setup.py        # 初始化逻辑
+│       │   ├── deploy.py       # 部署逻辑
 │       │   ├── pipeline.py     # 流水线执行器
 │       │   └── generator.py    # AI 内容生成器
 │       ├── models/
 │       │   ├── config.py       # Pydantic 配置模型
+│       │   ├── user_config.py  # 用户 GitHub 配置
 │       │   └── blog.py         # 博客数据模型
 │       └── utils/
+│           ├── github_client.py # GitHub API 客户端
 │           ├── fs.py           # 文件系统操作
 │           ├── yaml.py         # YAML 处理
 │           └── log.py          # 日志工具
@@ -264,5 +283,7 @@ droneblog_mcp/
 1. **Python 版本**: 需要 Python 3.11+
 2. **Hexo 依赖**: 博客目录必须包含有效的 Hexo 项目（`_config.yml`、`source/_posts/` 等）
 3. **OpenAI API Key**: 只有 `blog_generate` 和 `pipeline_run` 的 `content_creation` 任务需要
-4. **人工审核**: 默认会打开编辑器让用户审核生成的文章，可通过 `auto_confirm=true` 跳过（仅用于自动化场景）
-5. **Git 提交**: 部署前确保已配置 `hexo-deployer-git`
+4. **GitHub Token**: `setup_init` 需要 GitHub Personal Access Token（需要 `repo` 或 `public_repo` 权限）
+5. **人工审核**: 默认会打开编辑器让用户审核生成的文章，可通过 `auto_confirm=true` 跳过（仅用于自动化场景）
+6. **自动部署**: `blog_generate` 支持 `auto_deploy=true` 参数，根据配置的模式自动部署（local 模式执行 `hexo deploy`，sync 模式提交到 GitHub 触发 Actions）
+7. **Git 提交**: 部署前确保已配置 `hexo-deployer-git`（local 模式）或已初始化 GitHub 绑定（sync 模式）

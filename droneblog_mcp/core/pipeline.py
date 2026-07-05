@@ -27,6 +27,7 @@ def run_pipeline(
     prompt: str = "",
     model: Optional[str] = None,
     auto_confirm: bool = False,
+    auto_deploy: bool = False,
 ) -> dict:
     """执行完整的 6 阶段 AI 流水线
 
@@ -41,6 +42,7 @@ def run_pipeline(
     额外步骤:
     - 人工审核（可跳过）
     - 构建验证
+    - 自动部署（可选）
     """
     config = get_config()
     slug = generate_slug(topic)
@@ -131,10 +133,24 @@ def run_pipeline(
             pipeline_result["message"] = f"Article saved but build failed: {build_msg}"
             return pipeline_result
 
+        # === 自动部署（可选）===
+        if auto_deploy:
+            from droneblog_mcp.core.deploy import auto_deploy_article
+            deploy_result = auto_deploy_article(slug, content)
+            pipeline_result["deploy"] = deploy_result
+            if deploy_result["status"] == "success":
+                log("OK", "deploy", f"自动部署成功: {deploy_result.get('message', '')}")
+            elif deploy_result["status"] == "skip":
+                log("INFO", "deploy", f"跳过自动部署: {deploy_result.get('message', '')}")
+            else:
+                log("WARN", "deploy", f"自动部署失败: {deploy_result.get('message', '')}")
+                pipeline_result["status"] = "warning"
+                pipeline_result["message"] = f"Build passed but deploy failed: {deploy_result.get('message', '')}"
+
         # === 阶段 7: 输出规范 ===
         log("OK", "output", f"任务完成: {topic}")
         pipeline_result["pipeline_stages"]["output"] = "ok"
-        pipeline_result["message"] = "Blog article generated and verified successfully"
+        pipeline_result["message"] = pipeline_result.get("message", "Blog article generated and verified successfully")
 
         return pipeline_result
 

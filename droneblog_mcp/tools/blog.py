@@ -22,6 +22,7 @@ def register_blog_tools(mcp: FastMCP) -> None:
         prompt: str = "",
         auto_confirm: bool = False,
         model: str = "",
+        auto_deploy: bool = False,
     ) -> dict:
         """生成一篇技术博客文章，经过完整的 6 阶段流水线
 
@@ -32,6 +33,7 @@ def register_blog_tools(mcp: FastMCP) -> None:
             prompt: 额外提示词，指导 AI 生成特定内容
             auto_confirm: 是否跳过人工审核（默认 false，建议保持 false）
             model: 使用的 AI 模型（默认 gpt-4o-mini）
+            auto_deploy: 是否自动部署（需要预先配置 GitHub 绑定）
 
         Returns:
             包含生成结果的字典，包括文件路径、构建状态、流水线各阶段结果
@@ -61,6 +63,7 @@ def register_blog_tools(mcp: FastMCP) -> None:
                 prompt=prompt,
                 model=model,
                 auto_confirm=auto_confirm,
+                auto_deploy=auto_deploy,
             )
             return result
         except Exception as e:

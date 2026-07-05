@@ -58,6 +58,21 @@ Environment Variables:
         help="Blog working directory (default: current directory)",
     )
 
+    # setup 命令
+    setup_parser = subparsers.add_parser("setup", help="Initialize GitHub binding")
+    setup_parser.add_argument(
+        "--token",
+        type=str,
+        required=True,
+        help="GitHub Personal Access Token",
+    )
+    setup_parser.add_argument(
+        "--mode",
+        choices=["local", "sync"],
+        default="local",
+        help="Setup mode: local (manual deploy) or sync (auto GitHub Actions)",
+    )
+
     # status 命令
     status_parser = subparsers.add_parser("status", help="Show pipeline status")
 
@@ -94,6 +109,25 @@ Environment Variables:
             return 1
         return 0
 
+    if args.command == "setup":
+        # 初始化 GitHub 绑定
+        from droneblog_mcp.core.setup import DroneBlogSetup
+        from droneblog_mcp.models.user_config import UserConfig
+
+        config = UserConfig(github_token=args.token)
+        setup = DroneBlogSetup(config)
+        result = setup.run_setup(args.mode)
+
+        print(f"Setup Result: {result['status']}")
+        for step in result.get("steps", []):
+            print(f"  {step}")
+        if result.get("errors"):
+            for err in result["errors"]:
+                print(f"  ERROR: {err}")
+        if result.get("message"):
+            print(f"\n{result['message']}")
+        return 0 if result["status"] in ("success", "warning") else 1
+
     if args.command == "serve" or args.command is None:
         # 初始化配置
         try:
@@ -122,6 +156,10 @@ Environment Variables:
         print(f"Model: {config.model}")
         print(f"")
         print(f"Available Tools:")
+        print(f"  - setup_init       初始化 GitHub 绑定")
+        print(f"  - setup_status     查看绑定状态")
+        print(f"  - setup_sync_posts 同步文章到 GitHub")
+        print(f"  - setup_update_config 更新配置")
         print(f"  - blog_generate    生成博客文章")
         print(f"  - blog_list        列出文章")
         print(f"  - blog_read        读取文章")

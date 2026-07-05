@@ -110,6 +110,8 @@ export DRONEBLOG_TEMPERATURE=0.7
 ### 命令行使用
 
 ```bash
+droneblog-mcp setup --token ghp_xxx --mode local   # 初始化 GitHub 绑定（本地模式）
+droneblog-mcp setup --token ghp_xxx --mode sync    # 初始化 GitHub 绑定（同步归档模式）
 droneblog-mcp status        # 查看流水线状态
 droneblog-mcp serve         # 启动 MCP Server（stdio 模式）
 droneblog-mcp serve --transport sse  # 启动 SSE 模式
@@ -136,7 +138,7 @@ droneblog-mcp serve --transport sse  # 启动 SSE 模式
 
 ### 可用功能
 
-- **11 个 Tools**: `blog_generate`, `blog_list`, `blog_read`, `blog_edit`, `blog_delete`, `config_get`, `config_set`, `build`, `deploy`, `pipeline_status`, `pipeline_run`
+- **15 个 Tools**: `setup_init`, `setup_status`, `setup_sync_posts`, `setup_update_config`, `blog_generate`, `blog_list`, `blog_read`, `blog_edit`, `blog_delete`, `config_get`, `config_set`, `build`, `deploy`, `pipeline_status`, `pipeline_run`
 - **5 个 Resources**: `blog://`, `config://site`, `config://theme`, `pipeline://log`, `blog://list`
 - **3 个 Prompts**: `blog_writing`, `tech_analysis`, `blog_idea_generator`
 

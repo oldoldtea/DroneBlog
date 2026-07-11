@@ -112,8 +112,8 @@ Environment Variables:
     serve_parser.add_argument(
         "--dir",
         type=str,
-        default=".",
-        help="Blog working directory (default: current directory)",
+        default=None,
+        help="Blog working directory（优先级：--dir > DRONEBLOG_DIR 环境变量 > 当前目录）",
     )
     serve_parser.add_argument(
         "-v",
@@ -205,6 +205,8 @@ Environment Variables:
     if args.command == "serve" or args.command is None:
         # 初始化配置
         try:
+            # 目录优先级：--dir > 已有 DRONEBLOG_DIR 环境变量 > 当前目录（配置默认值 "."）
+            # --dir 未显式传入时为 None，绝不覆盖环境变量（MCP 客户端通常在任意 cwd 启动）
             if hasattr(args, "dir") and args.dir:
                 os.environ["DRONEBLOG_DIR"] = os.path.abspath(args.dir)
 

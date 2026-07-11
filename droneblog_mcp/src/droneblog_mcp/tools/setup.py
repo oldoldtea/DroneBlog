@@ -1,5 +1,7 @@
 """DroneBlog MCP Server - Setup Tools"""
 
+import os
+
 from mcp.server.fastmcp import FastMCP
 
 from droneblog_mcp.core.setup import DroneBlogSetup
@@ -7,20 +9,36 @@ from droneblog_mcp.models.user_config import UserConfig, get_user_config, save_u
 from droneblog_mcp.utils.log import log
 
 
+def _resolve_github_token(token: str) -> str:
+    """优先使用入参 token，其次回退到环境变量，避免在工具参数/进程 argv 中明文传递。"""
+    return (
+        (token or "").strip()
+        or os.environ.get("DRONEBLOG_GITHUB_TOKEN", "")
+        or os.environ.get("GITHUB_TOKEN", "")
+    )
+
+
 def register_setup_tools(mcp: FastMCP) -> None:
     """注册设置相关 Tools"""
 
     @mcp.tool()
-    async def setup_init(token: str, mode: str = "local") -> dict:
+    async def setup_init(token: str = "", mode: str = "local") -> dict:
         """初始化 DroneBlog 配置
 
         Args:
-            token: GitHub Personal Access Token
+            token: GitHub Personal Access Token。可留空，留空时回退读取
+                   ``DRONEBLOG_GITHUB_TOKEN`` / ``GITHUB_TOKEN`` 环境变量（推荐，避免明文出现在对话中）。
             mode: "local" | "sync" (默认: local)
 
         Returns:
             包含初始化状态和步骤的字典
         """
+        token = _resolve_github_token(token)
+        if not token:
+            return {
+                "status": "fail",
+                "message": "未提供 GitHub Token：请传入 token 参数，或设置 DRONEBLOG_GITHUB_TOKEN 环境变量。",
+            }
         log("INFO", "setup", f"开始初始化，模式: {mode}")
         config = UserConfig(github_token=token)
         setup = DroneBlogSetup(config)
@@ -129,5 +147,5 @@ def register_setup_tools(mcp: FastMCP) -> None:
         return {
             "status": "success",
             "message": "配置已更新",
-            "config": config.model_dump(),
+            "config": config.safe_dump(),
         }

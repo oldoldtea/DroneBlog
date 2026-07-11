@@ -1,7 +1,5 @@
 """DroneBlog MCP Server - Deploy Module"""
 
-from pathlib import Path
-
 from droneblog_mcp.models.user_config import UserConfig, get_user_config
 from droneblog_mcp.utils.fs import hexo_deploy, write_post
 from droneblog_mcp.utils.github_client import GitHubClient

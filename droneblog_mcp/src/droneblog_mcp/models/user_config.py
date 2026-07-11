@@ -1,10 +1,21 @@
 """DroneBlog MCP Server - User GitHub Configuration"""
 
+import os
+import stat
 from pathlib import Path
 from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def mask_secret(value: str) -> str:
+    """将密钥脱敏为 ``前缀****末4位``，用于日志/工具返回值，绝不回显完整明文。"""
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "****"
+    return f"{value[:4]}****{value[-4:]}"
 
 
 class UserConfig(BaseSettings):
@@ -97,6 +108,13 @@ class UserConfig(BaseSettings):
         """站点配置文件"""
         return self.dir / "_config.yml"
 
+    def safe_dump(self) -> dict:
+        """导出可对外展示的配置字典：github_token 等敏感字段已脱敏。"""
+        data = self.model_dump()
+        if data.get("github_token"):
+            data["github_token"] = mask_secret(data["github_token"])
+        return data
+
 
 # 全局用户配置实例
 _user_config: UserConfig | None = None
@@ -125,11 +143,23 @@ def set_user_config(config: UserConfig) -> None:
 
 
 def save_user_config(config: UserConfig) -> None:
-    """保存用户配置到文件"""
+    """保存用户配置到 ``~/.config/droneblog/config.json``，并收紧权限为 0600。
+
+    注意：文件仍以明文保存 token（否则无法用于鉴权）。建议优先使用
+    ``DRONEBLOG_GITHUB_TOKEN`` 环境变量而非持久化 token；本函数仅把权限收紧到
+    当前用户可读写，作为最低限度的 at-rest 保护。
+    """
     config_dir = Path.home() / ".config" / "droneblog"
     config_dir.mkdir(parents=True, exist_ok=True)
-    
+
     config_path = config_dir / "config.json"
     with open(config_path, "w", encoding="utf-8") as f:
         import json
         json.dump(config.model_dump(), f, indent=2, ensure_ascii=False, default=str)
+
+    # 仅当前用户可读写；Windows 上 chmod 语义有限，失败时忽略并继续。
+    try:
+        os.chmod(config_path, stat.S_IRUSR | stat.S_IWUSR)
+        os.chmod(config_dir, stat.S_IRWXU)
+    except OSError:
+        pass

@@ -5,25 +5,33 @@ from typing import Optional
 
 import requests
 
+# 所有 GitHub API 请求的默认超时（秒），避免网络抖动导致工具调用无限挂起。
+DEFAULT_TIMEOUT = 30
+API_BASE = "https://api.github.com"
+
 
 class GitHubClient:
     """GitHub API 客户端"""
 
-    def __init__(self, token: str, username: str):
+    def __init__(self, token: str, username: str, timeout: int = DEFAULT_TIMEOUT):
         self.token = token
         self.username = username
+        self.timeout = timeout
+        # GitHub 对 classic PAT 与 fine-grained PAT 均接受 Bearer；统一使用 Bearer。
         self.headers = {
-            "Authorization": f"token {token}",
+            "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github.v3+json",
+            "X-GitHub-Api-Version": "2022-11-28",
         }
 
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
-        """发送 HTTP 请求"""
+        """发送 HTTP 请求（统一注入 timeout）。"""
+        kwargs.setdefault("timeout", self.timeout)
         return requests.request(method, url, headers=self.headers, **kwargs)
 
     def verify_token(self) -> dict:
         """验证 Token 并获取用户信息"""
-        resp = self._request("GET", "https://api.github.com/user")
+        resp = self._request("GET", f"{API_BASE}/user")
         if resp.status_code == 200:
             return {"valid": True, "user": resp.json()}
         return {"valid": False, "error": f"HTTP {resp.status_code}: {resp.text}"}
@@ -32,7 +40,7 @@ class GitHubClient:
         self, name: str, description: str = "", private: bool = False, auto_init: bool = True
     ) -> dict:
         """创建仓库"""
-        url = "https://api.github.com/user/repos"
+        url = f"{API_BASE}/user/repos"
         data = {
             "name": name,
             "description": description,
@@ -46,13 +54,13 @@ class GitHubClient:
 
     def repo_exists(self, name: str) -> bool:
         """检查仓库是否存在"""
-        url = f"https://api.github.com/repos/{self.username}/{name}"
+        url = f"{API_BASE}/repos/{self.username}/{name}"
         resp = self._request("GET", url)
         return resp.status_code == 200
 
     def get_repo(self, name: str) -> Optional[dict]:
         """获取仓库信息"""
-        url = f"https://api.github.com/repos/{self.username}/{name}"
+        url = f"{API_BASE}/repos/{self.username}/{name}"
         resp = self._request("GET", url)
         if resp.status_code == 200:
             return resp.json()
@@ -62,7 +70,7 @@ class GitHubClient:
         self, repo: str, path: str, content: str, message: str, branch: str = "main"
     ) -> dict:
         """创建或更新文件（GitHub Contents API）"""
-        url = f"https://api.github.com/repos/{self.username}/{repo}/contents/{path}"
+        url = f"{API_BASE}/repos/{self.username}/{repo}/contents/{path}"
 
         # 先获取文件 SHA（如果存在）
         get_resp = self._request("GET", url, params={"ref": branch})
@@ -84,7 +92,7 @@ class GitHubClient:
 
     def get_file(self, repo: str, path: str, branch: str = "main") -> Optional[str]:
         """获取文件内容"""
-        url = f"https://api.github.com/repos/{self.username}/{repo}/contents/{path}"
+        url = f"{API_BASE}/repos/{self.username}/{repo}/contents/{path}"
         resp = self._request("GET", url, params={"ref": branch})
         if resp.status_code == 200:
             data = resp.json()
@@ -94,7 +102,7 @@ class GitHubClient:
 
     def enable_pages(self, repo: str, branch: str = "master") -> dict:
         """启用 GitHub Pages"""
-        url = f"https://api.github.com/repos/{self.username}/{repo}/pages"
+        url = f"{API_BASE}/repos/{self.username}/{repo}/pages"
         data = {"source": {"branch": branch, "path": "/"}}
         resp = self._request("POST", url, json=data)
         if resp.status_code == 201:
@@ -106,14 +114,14 @@ class GitHubClient:
 
     def create_repo_dispatch(self, repo: str, event_type: str, payload: dict) -> bool:
         """触发 repository_dispatch"""
-        url = f"https://api.github.com/repos/{self.username}/{repo}/dispatches"
+        url = f"{API_BASE}/repos/{self.username}/{repo}/dispatches"
         data = {"event_type": event_type, "client_payload": payload}
         resp = self._request("POST", url, json=data)
         return resp.status_code == 204
 
     def list_repo_files(self, repo: str, path: str = "", branch: str = "main") -> list:
         """列出仓库文件"""
-        url = f"https://api.github.com/repos/{self.username}/{repo}/contents/{path}"
+        url = f"{API_BASE}/repos/{self.username}/{repo}/contents/{path}"
         resp = self._request("GET", url, params={"ref": branch})
         if resp.status_code == 200:
             return resp.json()

@@ -1,0 +1,68 @@
+name: MCP Server Check
+
+on:
+  push:
+    branches: [main, master, dev, dev-mcp-hardening]
+  pull_request:
+    branches: [main, master, dev]
+
+jobs:
+  check:
+    name: Lint + Test + Wheel smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install package (editable, with dev deps)
+        run: pip install -e "./droneblog_mcp[dev]"
+
+      - name: Ruff lint
+        run: ruff check droneblog_mcp/src droneblog_mcp/tests
+
+      - name: Ruff format check
+        run: ruff format --check droneblog_mcp/src droneblog_mcp/tests
+
+      - name: Pytest (unit + packaging + stdio handshake on editable install)
+        run: pytest droneblog_mcp/tests -q
+
+      - name: Build wheel
+        run: python -m build droneblog_mcp --wheel --outdir /tmp/dist
+
+      - name: Install wheel into a clean venv and run stdio handshake smoke
+        run: |
+          python -m venv /tmp/wenv
+          /tmp/wenv/bin/pip install /tmp/dist/*.whl
+          DRONEBLOG_DIR="$PWD" PYTHONUNBUFFERED=1 /tmp/wenv/bin/python - <<'PY'
+          import json, subprocess, sys, shutil, os
+          cmd = [shutil.which("droneblog-mcp") or "droneblog-mcp", "serve", "--transport", "stdio"]
+          msgs = [
+              {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}},
+              {"jsonrpc":"2.0","method":"notifications/initialized"},
+              {"jsonrpc":"2.0","id":2,"method":"tools/list"},
+              {"jsonrpc":"2.0","id":3,"method":"resources/list"},
+          ]
+          payload = "\n".join(json.dumps(m) for m in msgs) + "\n"
+          p = subprocess.run(cmd, input=payload, capture_output=True, text=True, timeout=25)
+          lines = [l for l in p.stdout.splitlines() if l.strip()]
+          assert lines, f"no stdout; stderr={p.stderr}"
+          parsed = []
+          for l in lines:
+              try:
+                  parsed.append(json.loads(l))
+              except json.JSONDecodeError:
+                  raise SystemExit(f"stdout pollution (non-JSON line): {l!r}")
+          by_id = {d.get("id"): d for d in parsed if isinstance(d, dict) and "id" in d}
+          assert by_id.get(2, {}).get("result", {}).get("tools"), f"tools/list failed: {by_id}"
+          n = len(by_id[2]["result"]["tools"])
+          assert n >= 15, f"expected >=15 tools, got {n}"
+          uris = {r["uri"] for r in by_id[3]["result"]["resources"]}
+          assert "blogs://list" in uris, f"missing blogs://list: {uris}"
+          print(f"OK: wheel stdio handshake, {n} tools, {len(uris)} resources")
+          PY

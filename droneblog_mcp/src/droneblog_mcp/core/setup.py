@@ -2,19 +2,25 @@
 
 import json
 import os
+import shutil
+import stat
 import subprocess
-from pathlib import Path
+import tempfile
 
 from droneblog_mcp.models.user_config import UserConfig, save_user_config
 from droneblog_mcp.utils.github_client import GitHubClient
 from droneblog_mcp.utils.log import log
 
+# 通过 setup 脚手架新建的“全新项目”默认主题；与本仓库（hexo-theme-maple）无关。
+DEFAULT_SCAFFOLD_THEME = "landscape"
+
 
 class DroneBlogSetup:
     """DroneBlog 初始化器"""
 
-    def __init__(self, config: UserConfig):
+    def __init__(self, config: UserConfig, theme: str = DEFAULT_SCAFFOLD_THEME):
         self.config = config
+        self.theme = theme
         self.github = GitHubClient(config.github_token, config.github_username)
 
     def run_setup(self, mode: str = "local") -> dict:
@@ -69,7 +75,7 @@ class DroneBlogSetup:
         try:
             self.config.sync_mode = mode
             save_user_config(self.config)
-            results["steps"].append("✓ 配置已保存到 ~/.config/droneblog/config.json")
+            results["steps"].append("✓ 配置已保存到 ~/.config/droneblog/config.json（权限 0600）")
         except Exception as e:
             results["errors"].append(f"保存配置失败: {e}")
 
@@ -166,7 +172,7 @@ class DroneBlogSetup:
             )
 
     def _generate_hexo_config(self) -> str:
-        """生成 Hexo 配置文件"""
+        """生成 Hexo 配置文件（仅用于脚手架创建的全新项目）"""
         return f"""# Hexo Configuration
 title: {self.config.github_username}'s Blog
 subtitle: ''
@@ -238,13 +244,13 @@ include:
 exclude:
 ignore:
 
-theme: landscape
+theme: {self.theme}
 
 deploy:
   type: git
   repo: https://github.com/{self.config.github_username}/{self.config.github_username}.github.io.git
   branch: master
-  message: "Site updated: {{ now('YYYY-MM-DD HH:mm:ss') }}"
+  message: "Site updated: {{{{ now('YYYY-MM-DD HH:mm:ss') }}}}"
 """
 
     def _generate_package_json(self) -> str:
@@ -334,28 +340,65 @@ jobs:
         return templates.get(name, "")
 
     def _clone_source_repo(self):
-        """克隆源码仓库到本地"""
-        repo_url = f"https://{self.config.github_token}@github.com/{self.config.source_repo_full}.git"
-        target_dir = self.config.dir
+        """克隆源码仓库到本地。
 
+        安全：token 通过临时 ``git credential`` 文件（0600）注入，**绝不**出现在
+        进程 argv 中（避免 ``ps`` 泄露）。克隆完成后立即删除临时文件。
+        """
+        target_dir = self.config.dir
         if target_dir.exists() and any(target_dir.iterdir()):
             # 目录已存在且有内容，跳过克隆
             return
-
         target_dir.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            ["git", "clone", repo_url, str(target_dir)],
-            check=True,
-            capture_output=True,
-        )
+
+        clone_url = f"https://github.com/{self.config.source_repo_full}.git"
+        cred_file = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8")
+        try:
+            cred_file.write(
+                f"https://{self.config.github_username}:{self.config.github_token}@github.com\n"
+            )
+            cred_file.close()
+            try:
+                os.chmod(cred_file.name, stat.S_IRUSR | stat.S_IWUSR)
+            except OSError:
+                pass
+
+            helper = f"store --file={cred_file.name}"
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    f"credential.helper={helper}",
+                    "clone",
+                    clone_url,
+                    str(target_dir),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=300,
+            )
+        finally:
+            try:
+                os.unlink(cred_file.name)
+            except OSError:
+                pass
 
     def _init_local_hexo(self):
-        """初始化本地 Hexo 项目"""
-        # 使用 hexo init 初始化项目
+        """初始化本地 Hexo 项目（解析 npx 路径，带超时，跨平台）。"""
+        npx = shutil.which("npx")
+        if not npx:
+            raise RuntimeError("未找到 npx：请先安装 Node.js（含 npm）")
         subprocess.run(
-            ["npx", "hexo", "init", str(self.config.dir)],
+            [npx, "hexo", "init", str(self.config.dir)],
             check=True,
             capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
         )
 
     def _setup_deploy_config(self):
@@ -371,7 +414,7 @@ deploy:
   type: git
   repo: https://github.com/{self.config.github_username}/{self.config.pages_repo_name}.git
   branch: master
-  message: "Site updated: {{ now('YYYY-MM-DD HH:mm:ss') }}"
+  message: "Site updated: {{{{ now('YYYY-MM-DD HH:mm:ss') }}}}"
 """
                 content += deploy_config
                 config_path.write_text(content, encoding="utf-8")

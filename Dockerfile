@@ -1,49 +1,42 @@
-# DroneBlog MCP Server - Docker 测试镜像
+# DroneBlog MCP Server - 容器镜像
+# 以非 editable 方式（pip install .）安装，验证真实打包路径；
+# 以非 root 运行；博客目录可写（生成/编辑/删除需要写权限）。
+
 FROM python:3.11-slim
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    nodejs \
-    npm \
+# 系统依赖：git（部署/克隆）、node+npm（Hexo）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        curl \
+        ca-certificates \
+        nodejs \
+        npm \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Hexo CLI
+# Hexo CLI（用于 build/deploy 工具）
 RUN npm install -g hexo-cli
 
-# 设置工作目录
-WORKDIR /app
+# ── 安装 MCP Server（验证真实打包）──
+WORKDIR /build
+COPY droneblog_mcp/pyproject.toml droneblog_mcp/README.md ./
+COPY droneblog_mcp/src ./src
+RUN pip install --no-cache-dir .
 
-# 复制项目文件
-COPY droneblog_mcp/ ./droneblog_mcp/
-COPY bin/setup-mcp-env.sh ./bin/
-COPY .gitignore ./
-COPY README.md ./
+# ── 运行时可写博客目录 ──
+WORKDIR /test-blog
+COPY _config.yml ./
+COPY scaffolds/ ./scaffolds/
+COPY source/_posts/ ./source/_posts/
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir \
-    mcp>=1.6.0 \
-    pydantic>=2.0 \
-    pydantic-settings>=2.0 \
-    pyyaml>=6.0 \
-    build
+# 非 root 运行，并确保博客目录可写
+RUN useradd -m -u 1000 app && chown -R app:app /test-blog
+USER app
 
-# 安装 MCP Server
-RUN cd droneblog_mcp && pip install -e .
+ENV DRONEBLOG_DIR=/test-blog \
+    PYTHONUNBUFFERED=1
 
-# 创建测试博客目录
-RUN mkdir -p /test-blog/source/_posts
-COPY _config.yml /test-blog/
-COPY scaffolds/ /test-blog/scaffolds/
-COPY source/_posts/ /test-blog/source/_posts/
-
-# 设置环境变量
-ENV DRONEBLOG_DIR=/test-blog
-ENV PYTHONUNBUFFERED=1
-
-# 暴露 SSE 端口
+# SSE 端口（仅 --transport sse 时使用）
 EXPOSE 8765
 
-# 默认命令
+# 默认 stdio（MCP 标准传输）；SSE：docker run ... droneblog-mcp serve --transport sse --host 0.0.0.0
 CMD ["droneblog-mcp", "serve", "--transport", "stdio"]

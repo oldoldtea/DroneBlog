@@ -20,6 +20,17 @@ __pycache__/
 venv/
 ENV/
 
+# 构建产物（绝不入库）
+dist/
+build/
+*.whl
+*.tar.gz
+
+# 本地密钥/环境（pydantic 会读取 .env，绝不入库）
+.env
+.env.*
+!.env.example
+
 # AI 流水线配置（纳入版本控制）
 !.ai-skills/pipeline-config.yml
 !.ai-skills/pipeline-executor.md

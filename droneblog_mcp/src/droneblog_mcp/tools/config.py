@@ -1,10 +1,9 @@
 """DroneBlog MCP Server - Config Tools"""
 
-from typing import Any, Optional
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from droneblog_mcp.models.config import get_config
 from droneblog_mcp.utils.log import log
 from droneblog_mcp.utils.yaml import get_site_config, set_site_config
 

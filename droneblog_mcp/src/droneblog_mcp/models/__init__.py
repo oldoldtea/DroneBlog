@@ -1,6 +1,5 @@
 """DroneBlog MCP Server - Models Package"""
 
-from droneblog_mcp.models.config import DroneBlogConfig, get_config, set_config
 from droneblog_mcp.models.blog import (
     BlogPost,
     BlogPostSummary,
@@ -8,6 +7,7 @@ from droneblog_mcp.models.blog import (
     PipelineStage,
     PipelineStatus,
 )
+from droneblog_mcp.models.config import DroneBlogConfig, get_config, set_config
 
 __all__ = [
     "DroneBlogConfig",

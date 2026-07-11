@@ -27,7 +27,8 @@ def register_setup_tools(mcp: FastMCP) -> None:
 
         Args:
             token: GitHub Personal Access Token。可留空，留空时回退读取
-                   ``DRONEBLOG_GITHUB_TOKEN`` / ``GITHUB_TOKEN`` 环境变量（推荐，避免明文出现在对话中）。
+                   ``DRONEBLOG_GITHUB_TOKEN`` / ``GITHUB_TOKEN`` 环境变量
+                   （推荐，避免明文出现在对话中）。
             mode: "local" | "sync" (默认: local)
 
         Returns:
@@ -37,7 +38,10 @@ def register_setup_tools(mcp: FastMCP) -> None:
         if not token:
             return {
                 "status": "fail",
-                "message": "未提供 GitHub Token：请传入 token 参数，或设置 DRONEBLOG_GITHUB_TOKEN 环境变量。",
+                "message": (
+                    "未提供 GitHub Token：请传入 token 参数，"
+                    "或设置 DRONEBLOG_GITHUB_TOKEN 环境变量。"
+                ),
             }
         log("INFO", "setup", f"开始初始化，模式: {mode}")
         config = UserConfig(github_token=token)
@@ -62,6 +66,7 @@ def register_setup_tools(mcp: FastMCP) -> None:
 
         # 检查 GitHub 连接状态
         from droneblog_mcp.utils.github_client import GitHubClient
+
         github = GitHubClient(config.github_token, config.github_username)
         try:
             verify = github.verify_token()

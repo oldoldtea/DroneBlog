@@ -1,19 +1,19 @@
 """DroneBlog MCP Server - YAML Utilities"""
 
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any
 
 import yaml
 
 from droneblog_mcp.models.config import get_config
 
 
-def load_yaml(path: Path) -> Optional[dict]:
+def load_yaml(path: Path) -> dict | None:
     """加载 YAML 文件"""
     if not path.exists():
         return None
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     except Exception:
         return None
@@ -53,7 +53,7 @@ def set_nested_value(data: dict, key_path: str, value: Any) -> dict:
     return data
 
 
-def get_site_config(scope: str = "site") -> Optional[dict]:
+def get_site_config(scope: str = "site") -> dict | None:
     """获取站点或主题配置"""
     config = get_config()
     if scope == "site":
@@ -68,9 +68,8 @@ def get_site_config(scope: str = "site") -> Optional[dict]:
     return None
 
 
-def set_site_config(scope: str, key_path: str, value: Any) -> Tuple[bool, str]:
+def set_site_config(scope: str, key_path: str, value: Any) -> tuple[bool, str]:
     """修改站点或主题配置"""
-    from typing import Tuple
 
     config = get_config()
     if scope == "site":

@@ -3,7 +3,6 @@
 import os
 import stat
 from pathlib import Path
-from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -128,7 +127,8 @@ def get_user_config() -> UserConfig:
         config_path = Path.home() / ".config" / "droneblog" / "config.json"
         if config_path.exists():
             import json
-            with open(config_path, "r", encoding="utf-8") as f:
+
+            with open(config_path, encoding="utf-8") as f:
                 data = json.load(f)
             _user_config = UserConfig(**data)
         else:
@@ -155,6 +155,7 @@ def save_user_config(config: UserConfig) -> None:
     config_path = config_dir / "config.json"
     with open(config_path, "w", encoding="utf-8") as f:
         import json
+
         json.dump(config.model_dump(), f, indent=2, ensure_ascii=False, default=str)
 
     # 仅当前用户可读写；Windows 上 chmod 语义有限，失败时忽略并继续。

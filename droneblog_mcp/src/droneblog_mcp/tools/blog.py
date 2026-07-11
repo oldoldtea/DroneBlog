@@ -1,14 +1,18 @@
 """DroneBlog MCP Server - Blog Tools"""
 
-from typing import Optional
-
 from mcp.server.fastmcp import FastMCP
 
 from droneblog_mcp.core.pipeline import run_pipeline
 from droneblog_mcp.models.config import get_config
-from droneblog_mcp.utils.fs import delete_post, list_posts, read_post, write_post
+from droneblog_mcp.utils.fs import (
+    build_frontmatter,
+    delete_post,
+    list_posts,
+    parse_frontmatter,
+    read_post,
+    write_post,
+)
 from droneblog_mcp.utils.log import log
-from droneblog_mcp.utils.fs import build_frontmatter, parse_frontmatter
 
 
 def register_blog_tools(mcp: FastMCP) -> None:
@@ -19,22 +23,32 @@ def register_blog_tools(mcp: FastMCP) -> None:
         topic: str,
         category: str,
         tags: list[str],
+        slug: str = "",
         prompt: str = "",
-        auto_confirm: bool = False,
+        auto_confirm: bool = True,
         model: str = "",
+        auto_deploy: bool = False,
     ) -> dict:
-        """生成一篇技术博客文章，经过完整的 6 阶段流水线
+        """生成一篇技术博客文章，经过完整的 6 阶段流水线。
+
+        生成的草稿会通过返回值的 ``draft`` 字段交还，便于在对话中审阅/改写；
+        默认 **不会** 打开本地编辑器（MCP stdio 无 TTY，打开会卡死）。
 
         Args:
             topic: 文章主题，如 "C++20 协程深度解析"
-            category: 分类，必须是以下之一: 后端开发、前端技术、系统编程、云原生、人工智能、分布式系统
+            category: 分类，必须是以下之一:
+                      后端开发、前端技术、系统编程、云原生、人工智能、分布式系统
             tags: 标签列表，2-3 个，如 ["C++", "协程", "异步编程"]
+            slug: 文章文件名（kebab-case，不含 .md）。纯中文 topic **必须**显式提供，
+                  否则无法从标题派生出合法 slug。留空时从 topic 派生。
             prompt: 额外提示词，指导 AI 生成特定内容
-            auto_confirm: 是否跳过人工审核（默认 false，建议保持 false）
-            model: 使用的 AI 模型（默认 gpt-4o-mini）
+            auto_confirm: 是否跳过本地编辑器审核（默认 true，MCP 推荐保持 true）
+            model: 使用的 AI 模型（默认读取配置 gpt-4o-mini）
+            auto_deploy: 是否自动部署（需要预先配置 GitHub 绑定）
 
         Returns:
-            包含生成结果的字典，包括文件路径、构建状态、流水线各阶段结果
+            包含生成结果的字典：status / message / file / slug / draft / build_status /
+            build_output / pipeline_stages / (deploy) / (security_warnings)
         """
         config = get_config()
         model = model or config.model
@@ -43,14 +57,19 @@ def register_blog_tools(mcp: FastMCP) -> None:
         if category not in config.valid_categories:
             return {
                 "status": "fail",
-                "message": f"Invalid category '{category}'. Must be one of: {config.valid_categories}",
+                "message": (
+                    f"Invalid category '{category}'. Must be one of: {config.valid_categories}"
+                ),
             }
 
         # 验证标签数量
         if len(tags) < config.min_tags or len(tags) > config.max_tags:
             return {
                 "status": "fail",
-                "message": f"Tags count {len(tags)} must be between {config.min_tags} and {config.max_tags}",
+                "message": (
+                    f"Tags count {len(tags)} must be between "
+                    f"{config.min_tags} and {config.max_tags}"
+                ),
             }
 
         try:
@@ -60,7 +79,9 @@ def register_blog_tools(mcp: FastMCP) -> None:
                 tags=tags,
                 prompt=prompt,
                 model=model,
+                slug=slug,
                 auto_confirm=auto_confirm,
+                auto_deploy=auto_deploy,
             )
             return result
         except Exception as e:
@@ -71,9 +92,9 @@ def register_blog_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def blog_list(
-        category: Optional[str] = None,
-        tag: Optional[str] = None,
-        year: Optional[int] = None,
+        category: str | None = None,
+        tag: str | None = None,
+        year: int | None = None,
         limit: int = 20,
     ) -> list[dict]:
         """列出博客文章，支持多种筛选条件
@@ -115,10 +136,10 @@ def register_blog_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def blog_edit(
         slug: str,
-        content: Optional[str] = None,
-        title: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-        category: Optional[str] = None,
+        content: str | None = None,
+        title: str | None = None,
+        tags: list[str] | None = None,
+        category: str | None = None,
     ) -> dict:
         """编辑现有博客文章，支持部分更新
 
@@ -151,6 +172,7 @@ def register_blog_tools(mcp: FastMCP) -> None:
 
         # 更新日期
         from datetime import datetime
+
         metadata["updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         new_content = build_frontmatter(metadata, body)

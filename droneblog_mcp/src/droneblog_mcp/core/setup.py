@@ -9,7 +9,6 @@ import tempfile
 
 from droneblog_mcp.models.user_config import UserConfig, save_user_config
 from droneblog_mcp.utils.github_client import GitHubClient
-from droneblog_mcp.utils.log import log
 
 # 通过 setup 脚手架新建的“全新项目”默认主题；与本仓库（hexo-theme-maple）无关。
 DEFAULT_SCAFFOLD_THEME = "landscape"
@@ -327,8 +326,10 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./public
           publish_branch: master
-          external_repository: ${{ github.repository_owner }}/${{ github.repository_owner }}.github.io
-"""
+""" + (
+            "          external_repository: ${{ github.repository_owner }}"
+            "/${{ github.repository_owner }}.github.io\n"
+        )
 
     def _generate_scaffold(self, name: str) -> str:
         """生成 scaffold 模板"""

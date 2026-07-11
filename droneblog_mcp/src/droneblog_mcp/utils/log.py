@@ -1,8 +1,6 @@
 """DroneBlog MCP Server - Logging Utilities"""
 
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from typing import Optional
 
 from droneblog_mcp.models.config import get_config
 
@@ -31,7 +29,7 @@ def read_log_lines(limit: int = 100) -> list[str]:
         return []
 
     try:
-        with open(log_file, "r", encoding="utf-8") as f:
+        with open(log_file, encoding="utf-8") as f:
             lines = f.readlines()
         return [line.strip() for line in lines[-limit:]]
     except Exception:
@@ -46,6 +44,7 @@ def parse_log_status() -> dict:
     for line in lines:
         # 格式: [timestamp] [status] [stage] message
         import re
+
         match = re.match(r"\[.*?\] \[(\w+)\] \[(\w+)\] (.*)", line)
         if match:
             status, stage, message = match.groups()

@@ -1,7 +1,6 @@
 """DroneBlog MCP Server - GitHub API Client"""
 
 import base64
-from typing import Optional
 
 import requests
 
@@ -58,7 +57,7 @@ class GitHubClient:
         resp = self._request("GET", url)
         return resp.status_code == 200
 
-    def get_repo(self, name: str) -> Optional[dict]:
+    def get_repo(self, name: str) -> dict | None:
         """获取仓库信息"""
         url = f"{API_BASE}/repos/{self.username}/{name}"
         resp = self._request("GET", url)
@@ -90,7 +89,7 @@ class GitHubClient:
             return {"success": True, "data": resp.json()}
         return {"success": False, "error": f"HTTP {resp.status_code}: {resp.text}"}
 
-    def get_file(self, repo: str, path: str, branch: str = "main") -> Optional[str]:
+    def get_file(self, repo: str, path: str, branch: str = "main") -> str | None:
         """获取文件内容"""
         url = f"{API_BASE}/repos/{self.username}/{repo}/contents/{path}"
         resp = self._request("GET", url, params={"ref": branch})

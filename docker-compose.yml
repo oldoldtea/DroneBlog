@@ -1,51 +1,31 @@
-version: "3.8"
+# DroneBlog MCP Server - 本地 SSE 编排
+# 文章目录在镜像内（COPY 自 source/_posts），容器内可写，不挂载为只读。
 
 services:
   droneblog-mcp:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: droneblog-mcp-test
+    container_name: droneblog-mcp
     environment:
       - DRONEBLOG_DIR=/test-blog
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DRONEBLOG_GITHUB_TOKEN=${DRONEBLOG_GITHUB_TOKEN:-}
       - DRONEBLOG_MODEL=gpt-4o-mini
-      - DRONEBLOG_TEMPERATURE=0.7
-    volumes:
-      - ./source/_posts:/test-blog/source/_posts:ro
-      - ./_config.yml:/test-blog/_config.yml:ro
-      - ./scaffolds:/test-blog/scaffolds:ro
     ports:
       - "8765:8765"
-    command: droneblog-mcp serve --transport sse
+    # 容器内监听 0.0.0.0 才能从宿主机访问 SSE
+    command:
+      ["droneblog-mcp", "serve", "--transport", "sse", "--host", "0.0.0.0", "--port", "8765"]
     healthcheck:
-      test: ["CMD", "droneblog-mcp", "status"]
+      # TCP 连通性探测：进程存活且端口在监听（不会像 GET /sse 那样挂起）
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import socket; socket.create_connection(('127.0.0.1', 8765), 2).close()\"",
+        ]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
       start_period: 5s
-
-  # 测试服务：运行 MCP Server 测试
-  droneblog-mcp-test:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: droneblog-mcp-test-runner
-    environment:
-      - DRONEBLOG_DIR=/test-blog
-    volumes:
-      - ./source/_posts:/test-blog/source/_posts:ro
-      - ./_config.yml:/test-blog/_config.yml:ro
-      - ./scaffolds:/test-blog/scaffolds:ro
-      - ./tests:/tests:ro
-    command: >
-      sh -c "
-        echo '=== 等待 MCP Server 启动 ===' &&
-        sleep 3 &&
-        echo '=== 运行测试 ===' &&
-        python /tests/docker-test.py
-      "
-    depends_on:
-      - droneblog-mcp
-    profiles:
-      - test
+    restart: unless-stopped

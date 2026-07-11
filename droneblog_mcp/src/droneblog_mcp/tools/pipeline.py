@@ -1,7 +1,5 @@
 """DroneBlog MCP Server - Pipeline Tools"""
 
-from typing import Optional
-
 from mcp.server.fastmcp import FastMCP
 
 from droneblog_mcp.utils.log import log, parse_log_status, read_log_lines
@@ -112,6 +110,7 @@ def register_pipeline_tools(mcp: FastMCP) -> None:
                     return {"status": "fail", "message": "Build failed before deploy"}
 
             from droneblog_mcp.utils.fs import hexo_deploy
+
             deploy_ok, deploy_msg = hexo_deploy()
             if deploy_ok:
                 log("OK", "output", "部署成功")

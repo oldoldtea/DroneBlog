@@ -2,7 +2,6 @@
 
 import json
 import os
-from typing import Optional
 
 from droneblog_mcp.models.config import get_config
 from droneblog_mcp.utils.log import log
@@ -13,9 +12,9 @@ def call_openai(
     category: str,
     tags: list[str],
     extra_prompt: str = "",
-    model: Optional[str] = None,
-    temperature: Optional[float] = None,
-    max_tokens: Optional[int] = None,
+    model: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
 ) -> str:
     """调用 OpenAI API 生成文章"""
     config = get_config()
@@ -27,6 +26,7 @@ def call_openai(
     model = model or config.model
     temperature = temperature or config.temperature
     max_tokens = max_tokens or config.max_tokens
+    base_url = (config.openai_base_url or "https://api.openai.com/v1").rstrip("/")
 
     system_prompt = """你是一个资深技术博客作者，为 DroneBlog 写作。
 
@@ -50,26 +50,25 @@ def call_openai(
 
 请输出完整的 Markdown 文件内容，包含 YAML Front-matter。"""
 
-    import urllib.request
     import urllib.error
+    import urllib.request
 
-    data = json.dumps({
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }).encode("utf-8")
+    data = json.dumps(
+        {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+    ).encode("utf-8")
 
     req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
+        f"{base_url}/chat/completions",
         data=data,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
     )
 
     try:
@@ -88,11 +87,9 @@ def generate_article(
     category: str,
     tags: list[str],
     prompt: str = "",
-    model: Optional[str] = None,
+    model: str | None = None,
 ) -> dict:
     """生成文章并返回结果"""
-    config = get_config()
-
     # 阶段 1: 需求分析
     log("OK", "analysis", f"任务类型=content_creation, 关键词={topic}")
 

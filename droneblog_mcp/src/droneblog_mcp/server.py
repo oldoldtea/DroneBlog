@@ -11,7 +11,8 @@ from droneblog_mcp.utils.yaml import get_site_config
 
 def create_server() -> FastMCP:
     """创建并配置 MCP Server"""
-    config = get_config()
+    # 触发一次配置加载：DRONEBLOG_DIR 非法时尽早失败，而不是等到首个工具调用。
+    get_config()
 
     mcp = FastMCP("droneblog")
 
@@ -34,6 +35,7 @@ def create_server() -> FastMCP:
         if not cfg:
             return "# Error\n\nFailed to load site config"
         import yaml
+
         return yaml.dump(cfg, allow_unicode=True, sort_keys=False)
 
     @mcp.resource("config://theme")
@@ -43,6 +45,7 @@ def create_server() -> FastMCP:
         if not cfg:
             return "# Error\n\nFailed to load theme config"
         import yaml
+
         return yaml.dump(cfg, allow_unicode=True, sort_keys=False)
 
     @mcp.resource("pipeline://log")
@@ -53,9 +56,9 @@ def create_server() -> FastMCP:
             return "# Pipeline Log\n\nNo log entries found."
         return "# Pipeline Log\n\n" + "\n".join(lines)
 
-    @mcp.resource("blog://list")
+    @mcp.resource("blogs://list")
     async def get_blog_list() -> str:
-        """获取博客文章列表"""
+        """获取博客文章列表（collection，区别于单篇的 ``blog://{slug}``，避免路由冲突）"""
         posts = list_posts(limit=50)
         if not posts:
             return "# Blog Posts\n\nNo posts found."

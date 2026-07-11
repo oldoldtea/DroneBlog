@@ -1,7 +1,6 @@
 """DroneBlog MCP Server - Configuration Models"""
 
 from pathlib import Path
-from typing import List
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,6 +24,10 @@ class DroneBlogConfig(BaseSettings):
     openai_api_key: str = Field(
         default="",
         description="OpenAI API Key",
+    )
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        description="OpenAI 兼容 API 的根地址（便于走代理或兼容端点）",
     )
 
     # 可选配置
@@ -54,7 +57,7 @@ class DroneBlogConfig(BaseSettings):
     )
 
     # 分类和标签规范（来自 AGENTS.md）
-    valid_categories: List[str] = Field(
+    valid_categories: list[str] = Field(
         default=[
             "后端开发",
             "前端技术",

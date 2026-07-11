@@ -116,7 +116,8 @@ class DroneBlogDeployer:
         log("OK", "deploy", f"同步完成: {synced} 成功, {failed} 失败")
         return {
             "status": "success" if failed == 0 else "warning",
-            "message": f"已同步 {synced} 篇文章到 GitHub" + (f", {failed} 失败" if failed > 0 else ""),
+            "message": f"已同步 {synced} 篇文章到 GitHub"
+            + (f", {failed} 失败" if failed > 0 else ""),
             "synced": synced,
             "failed": failed,
         }

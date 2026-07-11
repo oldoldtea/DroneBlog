@@ -2,83 +2,49 @@
 
 ## 打包
 
-### 方式一：Wheel 包（推荐）
+### Wheel 包
 
 ```bash
 cd droneblog_mcp
-
-# 使用虚拟环境的 Python 3.11 打包
-source ../.venv/bin/activate
-python -m build
+source ../.venv/bin/activate          # Python 3.11+
+python -m build --wheel --outdir dist
 ```
 
-输出：
-- `dist/droneblog_mcp-0.1.0-py3-none-any.whl` — 可直接安装的 wheel 包
-- `dist/droneblog_mcp-0.1.0.tar.gz` — 源码分发包
+输出：`dist/droneblog_mcp-0.2.0-py3-none-any.whl`（以及 `.tar.gz`，若同时构建 sdist）。
 
-> **注意**：系统 Python 3.8 缺少 `ensurepip`，无法直接运行 `python3 -m build`。请使用 `.venv`（Python 3.11）中的 `python`。
+> 构建产物（`dist/`、`*.whl`、`*.tar.gz`）**不纳入版本控制**，由 `.gitignore` 排除。请勿提交预构建 wheel。
 
-### 方式二：本地开发模式
+### 本地开发模式
 
 ```bash
 cd droneblog_mcp
-
-# 使用虚拟环境
-source ../.venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ## 安装
 
 ### 方式一：一键配置（推荐）
 
-项目根目录提供了自动配置脚本，一键创建 Python 3.11 虚拟环境并安装 MCP Server：
-
 ```bash
-# 在项目根目录执行
-bin/setup-mcp-env.sh
-
-# 激活虚拟环境
+bin/setup-mcp-env.sh        # 创建 .venv 并 pip install -e ".[dev]"，含导入自检
 source .venv/bin/activate
-
-# 验证安装
 droneblog-mcp version
 ```
 
 ### 方式二：手动安装
 
 ```bash
-# 创建 Python 3.11 虚拟环境
 python3.11 -m venv .venv
 source .venv/bin/activate
-
-# 安装 MCP Server（开发模式）
 cd droneblog_mcp
-pip install -e .
-
-# 验证
+pip install -e ".[dev]"
 droneblog-mcp version
 ```
 
-### 方式三：从 Wheel 包安装
+### 方式三：从 wheel 安装
 
 ```bash
-# 安装已构建的 wheel 包
-pip install droneblog_mcp/dist/droneblog_mcp-0.1.0-py3-none-any.whl
-```
-
-### 方式四：打包（开发者）
-
-```bash
-cd droneblog_mcp
-
-# 使用虚拟环境的 Python 打包
-source ../.venv/bin/activate
-python -m build
-
-# 输出：
-# dist/droneblog_mcp-0.1.0-py3-none-any.whl
-# dist/droneblog_mcp-0.1.0.tar.gz
+pip install dist/droneblog_mcp-0.2.0-py3-none-any.whl
 ```
 
 ## 配置
@@ -86,17 +52,19 @@ python -m build
 ### 环境变量
 
 ```bash
-export DRONEBLOG_DIR=/path/to/your/blog      # 博客工作目录（必需）
-export OPENAI_API_KEY=sk-...                 # OpenAI API Key（必需，用于 AI 生成）
-export DRONEBLOG_MODEL=gpt-4o-mini           # 默认 AI 模型（可选）
-export DRONEBLOG_TEMPERATURE=0.7             # 生成温度（可选）
-export DRONEBLOG_MAX_TOKENS=4000             # 最大 token 数（可选）
-export DRONEBLOG_AUTO_CONFIRM=false          # 是否跳过人工审核（可选，默认 false）
+export DRONEBLOG_DIR=/path/to/your/blog                 # 博客工作目录（必需）
+export OPENAI_API_KEY=sk-...                            # AI 生成（生成时必需）
+export DRONEBLOG_OPENAI_BASE_URL=https://api.openai.com/v1  # 兼容/代理端点（可选）
+export DRONEBLOG_MODEL=gpt-4o-mini                      # 默认模型（可选）
+export DRONEBLOG_TEMPERATURE=0.7                        # 生成温度（可选）
+export DRONEBLOG_MAX_TOKENS=4000                        # 最大 token 数（可选）
+export DRONEBLOG_GITHUB_TOKEN=ghp_...                   # GitHub PAT（可选，推荐）
 ```
+
+> 也可复制仓库根目录的 `.env.example` 为 `.env` 填写；`.env` 已被 `.gitignore` 排除。
 
 ### MCP 客户端配置（Claude Desktop）
 
-编辑配置文件：
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **Linux**: `~/.config/Claude/claude_desktop_config.json`
@@ -105,10 +73,10 @@ export DRONEBLOG_AUTO_CONFIRM=false          # 是否跳过人工审核（可选
 {
   "mcpServers": {
     "droneblog": {
-      "command": "python3",
-      "args": ["-m", "droneblog_mcp"],
+      "command": "droneblog-mcp",
+      "args": ["serve", "--transport", "stdio"],
       "env": {
-        "DRONEBLOG_DIR": "/home/lz/workspace/personal/my_blog",
+        "DRONEBLOG_DIR": "/path/to/your/blog",
         "OPENAI_API_KEY": "sk-..."
       }
     }
@@ -116,174 +84,105 @@ export DRONEBLOG_AUTO_CONFIRM=false          # 是否跳过人工审核（可选
 }
 ```
 
-## 命令行使用
+> stdio 模式下服务默认**完全静默**（stdout 仅供 JSON-RPC）。排查时追加 `--verbose`，诊断信息输出到 stderr，不会污染协议通道。
 
-### 查看版本
+## 命令行使用
 
 ```bash
 droneblog-mcp version
-```
 
-### 初始化 GitHub 绑定
+# 初始化 GitHub 绑定（token 取自 DRONEBLOG_GITHUB_TOKEN 或交互式输入；--token 不推荐）
+droneblog-mcp setup --mode local      # 本地模式（手动 hexo deploy）
+droneblog-mcp setup --mode sync       # 同步归档模式（GitHub Actions 自动部署）
 
-```bash
-# 本地模式（手动 hexo deploy）
-droneblog-mcp setup --token ghp_xxx --mode local
-
-# 同步归档模式（GitHub Actions 自动部署）
-droneblog-mcp setup --token ghp_xxx --mode sync
-```
-
-### 查看状态
-
-```bash
-# 使用环境变量指定博客目录
-export DRONEBLOG_DIR=/path/to/blog
-droneblog-mcp status
-
-# 或临时指定
+# 查看状态
 DRONEBLOG_DIR=/path/to/blog droneblog-mcp status
+
+# 启动 MCP Server
+droneblog-mcp serve                                                # stdio（默认）
+droneblog-mcp serve --transport sse --host 0.0.0.0 --port 8765     # SSE
+droneblog-mcp serve --dir /path/to/blog --verbose                  # 指定目录 + stderr 横幅
 ```
 
-### 启动 MCP Server
-
-```bash
-# stdio 模式（默认，用于 MCP 客户端如 Claude Desktop）
-droneblog-mcp serve
-
-# SSE 模式（HTTP 接口）
-droneblog-mcp serve --transport sse
-
-# 指定博客目录
-droneblog-mcp serve --dir /path/to/blog
-```
-
-## 可用 Tools（15 个）
+## 可用 Tools（15）
 
 | Tool | 功能 | 示例参数 |
 |------|------|----------|
-| `setup_init` | 初始化 GitHub 绑定 | `{"token": "ghp_xxx", "mode": "local"}` |
+| `setup_init` | 初始化 GitHub 绑定 | `{"mode": "local"}`（token 取环境变量） |
 | `setup_status` | 查看绑定状态 | `{}` |
 | `setup_sync_posts` | 同步文章到 GitHub | `{}` |
-| `setup_update_config` | 更新配置 | `{"github_token": "ghp_xxx", "sync_mode": "sync"}` |
-| `blog_generate` | 生成博客文章 | `{"topic": "C++20 协程", "category": "系统编程", "tags": ["C++", "协程", "异步编程"], "auto_deploy": false}` |
+| `setup_update_config` | 更新配置（返回值 token 已脱敏） | `{"sync_mode": "sync"}` |
+| `blog_generate` | 生成博客文章 | `{"topic": "C++20 协程", "slug": "cpp20-coroutines", "category": "系统编程", "tags": ["C++", "协程"]}` |
 | `blog_list` | 列出文章 | `{"category": "后端开发", "limit": 10}` |
 | `blog_read` | 读取文章 | `{"slug": "tokio-async-runtime"}` |
-| `blog_edit` | 编辑文章 | `{"slug": "xxx", "title": "新标题", "tags": ["新标签1", "新标签2"]}` |
+| `blog_edit` | 编辑文章 | `{"slug": "xxx", "title": "新标题"}` |
 | `blog_delete` | 删除文章 | `{"slug": "xxx", "confirm": true}` |
 | `config_get` | 获取配置 | `{"scope": "site"}` |
 | `config_set` | 修改配置 | `{"scope": "site", "key": "title", "value": "新标题"}` |
-| `build` | 构建站点 | `{}` |
+| `build` | 构建站点 | `{"clean": true}` |
 | `deploy` | 部署站点 | `{"build_first": true}` |
 | `pipeline_status` | 查看流水线状态 | `{}` |
 | `pipeline_run` | 执行完整流水线 | `{"task_type": "debug_build", "params": {}}` |
 
-## 可用 Resources（5 个）
+### `blog_generate` 要点
+
+- `slug`：**纯中文 `topic` 必须显式提供 `slug`**（kebab-case）。否则工具返回清晰错误，不会写出 `source/_posts/.md`。
+- `auto_confirm`：默认 `true`。MCP 场景下**不会**打开本地编辑器（无 TTY 会卡死）；生成的正文通过返回值的 `draft` 字段回传，由客户端在对话中审阅/改写后再 `blog_edit` 定稿。
+- `auto_deploy`：`true` 时按配置模式自动部署（local → `hexo deploy`；sync → 提交 GitHub 触发 Actions）。
+
+## 可用 Resources
 
 | Resource | 内容 |
 |----------|------|
-| `blog://{slug}` | 单篇文章 Markdown 内容 |
-| `blog://list` | 文章列表 |
+| `blog://{slug}` | 单篇文章 Markdown（模板） |
+| `blogs://list` | 文章列表（collection；与 `blog://{slug}` 区分，避免路由冲突） |
 | `config://site` | 站点配置 YAML |
 | `config://theme` | 主题配置 YAML |
 | `pipeline://log` | 流水线日志 |
 
-## 可用 Prompts（3 个）
+## 可用 Prompts（3）
 
-| Prompt | 用途 |
-|--------|------|
-| `blog_writing` | 博客写作助手 |
-| `tech_analysis` | 技术文章分析 |
-| `blog_idea_generator` | 博客选题生成 |
+`blog_writing` / `tech_analysis` / `blog_idea_generator`
 
-## 使用示例
+## Docker
 
-### 生成文章
-
-```
-User: 帮我写一篇关于 "C++20 协程" 的博客文章，分类到系统编程，标签是 C++、协程、异步编程
-
-Claude: [调用 blog_generate 工具]
-
-文章已生成！文件路径: source/_posts/cpp20-coroutines.md
-标题: C++20 协程深度解析
-分类: 系统编程
-标签: C++, 协程, 异步编程
-已通过 6 阶段流水线验证，构建成功。
+```bash
+docker build -t droneblog-mcp .
+docker run --rm -e DRONEBLOG_DIR=/test-blog -e OPENAI_API_KEY=sk-... droneblog-mcp     # stdio
+docker compose up                                                                      # SSE（见 docker-compose.yml）
 ```
 
-### 列出文章
-
-```
-User: 列出我最近写的关于 Kafka 的文章
-
-Claude: [调用 blog_list 工具，筛选 tag=Kafka]
-
-找到 2 篇文章:
-1. kafka-message-transmission (Kafka 消息传输机制)
-2. kafka-source-analysis (Kafka 源码解析)
-```
-
-### 构建部署
-
-```
-User: 构建并部署站点
-
-Claude: [调用 build 工具，然后调用 deploy 工具]
-
-构建成功！public/ 目录已生成。
-部署成功！已推送到 oldoldtea.github.io 的 master 分支。
-```
+镜像以 `pip install .`（非 editable）安装以验证真实打包，非 root 运行，博客目录在镜像内可写；健康检查为 TCP 连通性探测（不会因 `GET /sse` 挂起）。
 
 ## 项目结构
 
 ```
 droneblog_mcp/
-├── pyproject.toml              # 项目配置
-├── README.md
-├── src/
-│   └── droneblog_mcp/
-│       ├── __init__.py
-│       ├── __main__.py         # CLI 入口
-│       ├── server.py           # MCP Server 主类
-│       ├── tools/
-│       │   ├── setup.py        # GitHub 绑定工具
-│       │   ├── blog.py         # 文章相关工具
-│       │   ├── config.py       # 配置相关工具
-│       │   ├── build.py        # 构建部署工具
-│       │   └── pipeline.py     # 流水线工具
-│       ├── core/
-│       │   ├── setup.py        # 初始化逻辑
-│       │   ├── deploy.py       # 部署逻辑
-│       │   ├── pipeline.py     # 流水线执行器
-│       │   └── generator.py    # AI 内容生成器
-│       ├── models/
-│       │   ├── config.py       # Pydantic 配置模型
-│       │   ├── user_config.py  # 用户 GitHub 配置
-│       │   └── blog.py         # 博客数据模型
-│       └── utils/
-│           ├── github_client.py # GitHub API 客户端
-│           ├── fs.py           # 文件系统操作
-│           ├── yaml.py         # YAML 处理
-│           └── log.py          # 日志工具
-├── dist/                       # 构建输出
-│   ├── droneblog_mcp-0.1.0-py3-none-any.whl
-│   └── droneblog_mcp-0.1.0.tar.gz
-└── tests/                      # 测试目录
+├── pyproject.toml              # 仅打包 src/droneblog_mcp；声明全部运行依赖
+├── README.md / USAGE.md
+├── src/droneblog_mcp/
+│   ├── __init__.py / __main__.py / server.py
+│   ├── tools/   setup blog config build pipeline
+│   ├── core/    generator pipeline setup deploy
+│   ├── models/  config user_config blog
+│   └── utils/   fs yaml log github_client
+└── tests/                      # pytest：validators / packaging / stdio handshake
 ```
 
 ## 流水线阶段
 
 ```
-[需求分析] → [Skill 识别] → [AI 生成] → [人工审核] → [合规审核] → [安全审查] → [构建验证] → [输出]
+[需求分析] → [Skill 识别] → [AI 生成] → [对话内审阅] → [合规审核] → [安全审查] → [构建验证] → [输出]
 ```
+
+> 注：旧的“打开 `$EDITOR` 人工审核”已从默认路径移除（MCP stdio 无 TTY）；审阅在客户端对话中完成。
+> CLI 交互场景如需本地编辑器，可在 `run_pipeline(..., interactive=True, auto_confirm=False)` 且存在 TTY 时启用。
 
 ## 注意事项
 
-1. **Python 版本**: 需要 Python 3.11+
-2. **Hexo 依赖**: 博客目录必须包含有效的 Hexo 项目（`_config.yml`、`source/_posts/` 等）
-3. **OpenAI API Key**: 只有 `blog_generate` 和 `pipeline_run` 的 `content_creation` 任务需要
-4. **GitHub Token**: `setup_init` 需要 GitHub Personal Access Token（需要 `repo` 或 `public_repo` 权限）
-5. **人工审核**: 默认会打开编辑器让用户审核生成的文章，可通过 `auto_confirm=true` 跳过（仅用于自动化场景）
-6. **自动部署**: `blog_generate` 支持 `auto_deploy=true` 参数，根据配置的模式自动部署（local 模式执行 `hexo deploy`，sync 模式提交到 GitHub 触发 Actions）
-7. **Git 提交**: 部署前确保已配置 `hexo-deployer-git`（local 模式）或已初始化 GitHub 绑定（sync 模式）
+1. **Python 版本**：3.11+。
+2. **Hexo 依赖**：博客目录需为有效 Hexo 项目（`_config.yml`、`source/_posts/`）。
+3. **OpenAI API Key**：仅 `blog_generate` 与 `pipeline_run(task_type="content_creation")` 需要。
+4. **GitHub Token**：`setup_init` 需要 `repo`（或 `public_repo`）权限；优先用 `DRONEBLOG_GITHUB_TOKEN` 环境变量，勿用 `--token`（会进进程列表）。
+5. **密钥脱敏**：`setup_update_config` 返回值中的 token 已脱敏；`~/.config/droneblog/config.json` 写入后权限收紧为 0600；克隆仓库时 token 通过临时 credential 文件注入，不进 argv。
+6. **构建输出**：`build` / `pipeline_run(debug_build)` 现在回传 hexo 的真实输出，便于定位失败原因（不再只返回 “failed”）。

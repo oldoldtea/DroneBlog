@@ -2,6 +2,7 @@
 
 from mcp.server.fastmcp import FastMCP
 
+from droneblog_mcp.models.config import get_config
 from droneblog_mcp.utils.log import log, parse_log_status, read_log_lines
 
 
@@ -18,9 +19,12 @@ def register_pipeline_tools(mcp: FastMCP) -> None:
         stages = parse_log_status()
         recent_logs = read_log_lines(50)
 
+        # ready = 最近一次运行没有任何阶段处于 FAIL（日志按阶段记录最后状态）
+        pipeline_ready = not any(s.get("status") == "FAIL" for s in stages.values())
+
         return {
             "status": "success",
-            "pipeline_ready": True,
+            "pipeline_ready": pipeline_ready,
             "stages": stages,
             "recent_logs": recent_logs,
         }
@@ -28,7 +32,7 @@ def register_pipeline_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def pipeline_run(
         task_type: str,
-        params: dict = {},
+        params: dict | None = None,
     ) -> dict:
         """执行完整的 6 阶段 AI 流水线
 
@@ -36,7 +40,7 @@ def register_pipeline_tools(mcp: FastMCP) -> None:
             task_type: 任务类型，可选值: content_creation（内容创作）、config_change（配置调整）、
                       theme_custom（主题定制）、debug_build（问题排查）、deploy（部署发布）
             params: 任务参数，根据任务类型不同而不同
-                - content_creation: {topic, category, tags, prompt, model, auto_confirm}
+                - content_creation: {topic, category, tags, prompt, model, slug, auto_confirm}
                 - config_change: {scope, key, value}
                 - theme_custom: {key, value}
                 - debug_build: {}
@@ -49,16 +53,37 @@ def register_pipeline_tools(mcp: FastMCP) -> None:
         from droneblog_mcp.utils.fs import hexo_build
         from droneblog_mcp.utils.yaml import set_site_config
 
+        params = params or {}
+
         if task_type == "content_creation":
             topic = params.get("topic", "")
             category = params.get("category", "后端开发")
-            tags = params.get("tags", [])
+            tags = params.get("tags", []) or []
             prompt = params.get("prompt", "")
             model = params.get("model", "")
-            auto_confirm = params.get("auto_confirm", False)
+            slug = params.get("slug", "")
+            auto_confirm = params.get("auto_confirm", True)
 
             if not topic:
                 return {"status": "fail", "message": "Missing required param: topic"}
+
+            # 与 blog_generate 一致的入参校验（单一来源在工具层提前失败）
+            config = get_config()
+            if category not in config.valid_categories:
+                return {
+                    "status": "fail",
+                    "message": (
+                        f"Invalid category '{category}'. Must be one of: {config.valid_categories}"
+                    ),
+                }
+            if not (config.min_tags <= len(tags) <= config.max_tags):
+                return {
+                    "status": "fail",
+                    "message": (
+                        f"Tags count {len(tags)} must be between "
+                        f"{config.min_tags} and {config.max_tags}"
+                    ),
+                }
 
             try:
                 result = run_pipeline(
@@ -67,6 +92,7 @@ def register_pipeline_tools(mcp: FastMCP) -> None:
                     tags=tags,
                     prompt=prompt,
                     model=model or None,
+                    slug=slug,
                     auto_confirm=auto_confirm,
                 )
                 return result

@@ -91,9 +91,39 @@ class DroneBlogConfig(BaseSettings):
         return self.dir / "_config.yml"
 
     @property
+    def theme_name(self) -> str:
+        """当前启用的主题名：读站点 ``_config.yml`` 的 ``theme`` 字段，缺省 ``landscape``
+        （hexo 在 ``theme:`` 缺省时的默认主题）。"""
+        import yaml
+
+        cfg_file = self.dir / "_config.yml"
+        try:
+            if cfg_file.exists():
+                data = yaml.safe_load(cfg_file.read_text(encoding="utf-8")) or {}
+                name = str(data.get("theme") or "").strip()
+                if name:
+                    return name
+        except Exception:
+            pass
+        return "landscape"
+
+    @property
     def theme_config_file(self) -> Path:
-        """主题配置文件"""
-        return self.dir / "themes" / "hexo-theme-maple" / "_config.yml"
+        """主题配置文件，按 hexo 的主题解析顺序查找：
+
+        ``themes/<name>`` > ``node_modules/hexo-theme-<name>`` > ``node_modules/<name>``。
+        均不存在时返回首选路径（便于错误信息定位问题），而不是写死某个主题名。
+        """
+        name = self.theme_name
+        candidates = [
+            self.dir / "themes" / name / "_config.yml",
+            self.dir / "node_modules" / f"hexo-theme-{name}" / "_config.yml",
+            self.dir / "node_modules" / name / "_config.yml",
+        ]
+        for cand in candidates:
+            if cand.exists():
+                return cand
+        return candidates[0]
 
     @property
     def log_file(self) -> Path:

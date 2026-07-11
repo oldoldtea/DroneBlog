@@ -108,32 +108,56 @@ def count_words(text: str) -> int:
     return chinese_chars + english_words
 
 
+# 支持的 front-matter 日期格式（按项目中出现频率排序）
+_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d")
+
+
+def _parse_post_date(value) -> datetime | None:
+    """容忍多种格式的日期解析；失败返回 None（调用方决定兜底策略）。"""
+    if isinstance(value, datetime):
+        return value
+    if value is None:
+        return None
+    text = str(value).strip()
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def list_posts(
     category: str | None = None,
     tag: str | None = None,
     year: int | None = None,
     limit: int = 20,
 ) -> list[dict]:
-    """列出博客文章"""
+    """列出博客文章，按发布日期**倒序**（最新在前）。
+
+    排序依据 front-matter 的 ``date``（解析失败的文章排末尾、按文件名兜底），
+    而非文件名——文件名顺序与发布时间无任何关系。
+    """
     config = get_config()
     posts_dir = config.posts_dir
 
     if not posts_dir.exists():
         return []
 
-    posts = []
-    for md_file in sorted(posts_dir.glob("*.md"), reverse=True):
+    entries = []
+    for md_file in posts_dir.glob("*.md"):
         try:
             content = md_file.read_text(encoding="utf-8")
             metadata, body = parse_frontmatter(content)
 
             post_date = metadata.get("date", "")
-            if year and post_date:
-                try:
-                    post_year = datetime.strptime(str(post_date), "%Y-%m-%d %H:%M:%S").year
-                    if post_year != year:
+            parsed = _parse_post_date(post_date)
+            if year:
+                if parsed is not None:
+                    if parsed.year != year:
                         continue
-                except ValueError:
+                elif not str(post_date).startswith(str(year)):
+                    # 日期不可解析时退化为字符串前缀匹配，避免静默丢文章
                     continue
 
             post_tags = metadata.get("tags", []) or []
@@ -144,20 +168,26 @@ def list_posts(
             if category and category not in post_categories:
                 continue
 
-            posts.append(
-                {
-                    "slug": md_file.stem,
-                    "title": metadata.get("title", md_file.stem),
-                    "date": str(post_date),
-                    "tags": post_tags,
-                    "categories": post_categories,
-                    "word_count": count_words(body),
-                }
+            entries.append(
+                (
+                    parsed or datetime.min,
+                    md_file.stem,
+                    {
+                        "slug": md_file.stem,
+                        "title": metadata.get("title", md_file.stem),
+                        "date": str(post_date),
+                        "tags": post_tags,
+                        "categories": post_categories,
+                        "word_count": count_words(body),
+                    },
+                )
             )
         except Exception:
             continue
 
-    return posts[:limit]
+    # 日期倒序；同日按文件名倒序兜底，保证确定性
+    entries.sort(key=lambda e: (e[0], e[1]), reverse=True)
+    return [e[2] for e in entries[:limit]]
 
 
 def read_post(slug: str) -> dict | None:
@@ -172,11 +202,14 @@ def read_post(slug: str) -> dict | None:
     content = md_file.read_text(encoding="utf-8")
     metadata, body = parse_frontmatter(content)
 
+    # date/updated 经 yaml 解析后可能是 datetime 对象，统一转字符串，
+    # 与 list_posts 的输出类型保持一致（"YYYY-MM-DD HH:MM:SS"）
+    updated = metadata.get("updated")
     return {
         "slug": slug,
         "title": metadata.get("title", slug),
-        "date": metadata.get("date", ""),
-        "updated": metadata.get("updated", None),
+        "date": str(metadata.get("date", "") or ""),
+        "updated": str(updated) if updated else None,
         "tags": metadata.get("tags", []) or [],
         "categories": metadata.get("categories", []) or [],
         "content": body,

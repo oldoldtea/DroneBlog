@@ -39,4 +39,5 @@ build/
 # MCP 端到端测试临时沙盒（勿入库）
 droneblog-aigen-test/
 droneblog-sandbox*/
+droneblog-launch-test/
 theme-fallback-test/

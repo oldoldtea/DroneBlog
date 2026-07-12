@@ -226,3 +226,19 @@ def test_run_hexo_detaches_stdin(tmp_path, monkeypatch):
     fs._run_hexo(tmp_path, ["generate"])
     assert captured.get("stdin") is fs.subprocess.DEVNULL, "hexo 子进程必须断开 stdin"
 
+
+def test_run_hexo_help_output_is_not_success(tmp_path, monkeypatch):
+    # F11: hexo CLI 在无效站点对子命令只打印帮助且退出码 0——不得误判为成功
+    from droneblog_mcp.utils import fs
+
+    class _HelpProc:
+        returncode = 0
+        stdout = "Commands:\n  help     Get help on a command.\n  init     Create new."
+        stderr = ""
+
+    monkeypatch.setattr(fs, "_resolve_hexo", lambda d: ["/bin/hexo"])
+    monkeypatch.setattr(fs.subprocess, "run", lambda *a, **k: _HelpProc())
+    ok, msg = fs._run_hexo(tmp_path, ["generate"])
+    assert ok is False, "打印帮助信息必须判为失败，而非 Build successful"
+    assert "npm install" in msg or "不是有效的 hexo" in msg
+

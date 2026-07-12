@@ -351,6 +351,17 @@ def _run_hexo(blog_dir: Path, args: list[str], timeout: int = HEXO_TIMEOUT) -> t
         return False, f"执行 hexo 失败: {e}"
 
     output = ((proc.stdout or "") + (proc.stderr or "")).strip()
+
+    # hexo CLI 在未识别为有效站点（目录缺 package.json/本地 hexo）时，对 clean/generate/
+    # deploy 等子命令只打印帮助信息且**退出码为 0**——不能把"打印帮助"误判为执行成功，
+    # 否则用户没 npm install 时 hexo_build 会谎报 Build successful。
+    if "Get help on a command" in output:
+        head = "\n".join(output.splitlines()[:8])
+        return False, (
+            "hexo 未真正执行命令（输出了 CLI 帮助而非构建）：当前目录可能不是有效的 hexo "
+            "站点，或缺少 node_modules（请先在博客目录执行 npm install）。原始输出:\n" + head
+        )
+
     if proc.returncode != 0:
         # 失败时回传真实输出（截断尾部），便于 debug_build 定位
         tail = "\n".join(output.splitlines()[-40:]) if output else ""

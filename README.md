@@ -4,7 +4,7 @@
 
 - **线上地址**: https://oldoldtea.github.io
 - **站点语言**: 简体中文
-- **当前主题**: [hexo-theme-maple](https://github.com/xbmlz/hexo-theme-maple)
+- **当前主题**: [hexo-theme-kratos-rebirth](https://github.com/Candinya/hexo-theme-kratos-rebirth)（v3.0.1，经 npm 安装）
 
 ---
 
@@ -103,19 +103,24 @@ export DRONEBLOG_DIR=/path/to/your/blog
 export OPENAI_API_KEY=sk-...
 
 # 可选
+export DRONEBLOG_OPENAI_BASE_URL=https://api.openai.com/v1  # 兼容/代理端点
 export DRONEBLOG_MODEL=gpt-4o-mini
 export DRONEBLOG_TEMPERATURE=0.7
+export DRONEBLOG_GITHUB_TOKEN=ghp_...    # GitHub 绑定/自动部署（推荐环境变量，勿用 --token）
 ```
 
 ### 命令行使用
 
 ```bash
-droneblog-mcp setup --token ghp_xxx --mode local   # 初始化 GitHub 绑定（本地模式）
-droneblog-mcp setup --token ghp_xxx --mode sync    # 初始化 GitHub 绑定（同步归档模式）
+# 初始化 GitHub 绑定（token 取自 DRONEBLOG_GITHUB_TOKEN 环境变量或交互式输入）
+droneblog-mcp setup --mode local   # 本地模式（手动 hexo deploy）
+droneblog-mcp setup --mode sync    # 同步归档模式（GitHub Actions 自动部署）
 droneblog-mcp status        # 查看流水线状态
-droneblog-mcp serve         # 启动 MCP Server（stdio 模式）
-droneblog-mcp serve --transport sse  # 启动 SSE 模式
+droneblog-mcp serve         # 启动 MCP Server（stdio 模式，默认）
+droneblog-mcp serve --transport sse --host 0.0.0.0 --port 8765  # 启动 SSE 模式
 ```
+
+> **安全提示**：请勿使用 `--token` 在命令行明文传入 GitHub Token（会出现在进程列表中）。推荐通过 `DRONEBLOG_GITHUB_TOKEN` 环境变量提供。
 
 ### Claude Desktop 配置
 
@@ -139,7 +144,7 @@ droneblog-mcp serve --transport sse  # 启动 SSE 模式
 ### 可用功能
 
 - **15 个 Tools**: `setup_init`, `setup_status`, `setup_sync_posts`, `setup_update_config`, `blog_generate`, `blog_list`, `blog_read`, `blog_edit`, `blog_delete`, `config_get`, `config_set`, `build`, `deploy`, `pipeline_status`, `pipeline_run`
-- **5 个 Resources**: `blog://`, `config://site`, `config://theme`, `pipeline://log`, `blog://list`
+- **5 个 Resources**: `blog://{slug}`（单篇文章）、`blogs://list`（文章列表）、`config://site`、`config://theme`、`pipeline://log`
 - **3 个 Prompts**: `blog_writing`, `tech_analysis`, `blog_idea_generator`
 
 详见 `droneblog_mcp/USAGE.md`
@@ -179,8 +184,9 @@ my_blog/
 │   ├── category/            # 分类汇总页
 │   └── tag/                 # 标签汇总页
 ├── scaffolds/               # 新建内容模板（post / draft / page）
-├── themes/
-│   └── hexo-theme-maple/    # 当前主题目录
+├── themes/                  # 主题目录（当前为空，主题经 npm 安装）
+├── node_modules/
+│   └── hexo-theme-kratos-rebirth/  # 当前主题（_config.yml 中 theme: kratos-rebirth）
 ├── public/                  # 生成的静态站点（hexo generate 输出）
 ├── .deploy_git/             # 部署临时仓库（hexo-deployer-git 使用）
 ├── droneblog_mcp/           # MCP Server（AI 驱动的博客管理工具）
@@ -238,7 +244,7 @@ categories:
 
 - [Hexo 官方文档](https://hexo.io/docs/)
 - [Hexo 部署指南](https://hexo.io/docs/one-command-deployment)
-- [Hexo-Theme-Maple](https://github.com/xbmlz/hexo-theme-maple)
+- [hexo-theme-kratos-rebirth](https://github.com/Candinya/hexo-theme-kratos-rebirth)
 
 ## Star
 

@@ -11,7 +11,7 @@
 
 ## 项目概览
 
-这是一个基于 [Hexo](https://hexo.io/) 框架搭建的静态博客，站点语言为**简体中文**，使用主题 [hexo-theme-maple](https://github.com/xbmlz/hexo-theme-maple)。
+这是一个基于 [Hexo](https://hexo.io/) 框架搭建的静态博客，站点语言为**简体中文**，使用主题 [hexo-theme-kratos-rebirth](https://github.com/Candinya/hexo-theme-kratos-rebirth)。
 
 - **站点标题**：DroneBlog
 - **作者**：OldOldTea
@@ -29,7 +29,7 @@
 | 模板引擎 | EJS (`hexo-renderer-ejs`) |
 | CSS 预处理器 | Stylus (`hexo-renderer-stylus`) |
 | Markdown 渲染 | `hexo-renderer-marked` + `hexo-renderer-multi-markdown-it` |
-| 主题 | `hexo-theme-maple`（本地子目录，非 npm 包） |
+| 主题 | `hexo-theme-kratos-rebirth`（v3.0.1，经 npm 安装于 `node_modules/`） |
 | 部署 | `hexo-deployer-git` → GitHub Pages |
 | 搜索 | Algolia (`hexo-algoliasearch`) |
 | RSS 订阅 | `hexo-generator-feed` (Atom 格式) |
@@ -53,12 +53,12 @@ my_blog/
 │   │   └── index.md         # 分类汇总页（layout: category）
 │   └── tag/
 │       └── index.md         # 标签汇总页（layout: tag）
-├── themes/
-│   └── hexo-theme-maple/    # 当前使用的主题（完整主题目录）
-│       ├── _config.yml      # 主题配置（导航、分析、插件开关等）
-│       ├── layout/          # EJS 模板
-│       ├── source/          # 主题静态资源（CSS、JS、图片）
-│       └── scripts/         # 主题辅助脚本（echarts、mermaid、wordcount）
+├── themes/                  # 本地主题目录（当前仅含 .gitkeep，主题经 npm 安装）
+├── node_modules/
+│   └── hexo-theme-kratos-rebirth/  # 当前使用的主题（npm 包）
+│       ├── _config.yml      # 主题默认配置（导航、搜索、评论、版权等）
+│       ├── layout/          # 模板
+│       └── source/          # 主题静态资源（CSS、JS、图片）
 ├── public/                  # 生成的静态站点（hexo generate 输出，.gitignore 忽略）
 └── .deploy_git/             # 部署时 hexo-deployer-git 使用的临时仓库
 ```
@@ -158,7 +158,7 @@ categories:
 - **永久链接**：`permalink: :year/:month/:day/:title/`
 - **分页**：首页及归档每页 10 篇文章
 - **代码高亮**：`syntax_highlighter: highlight.js`，行号开启
-- **主题**：`theme: hexo-theme-maple`
+- **主题**：`theme: kratos-rebirth`
 - **部署**：
   ```yaml
   deploy:
@@ -171,30 +171,34 @@ categories:
 
 ---
 
-## 主题配置（`themes/hexo-theme-maple/_config.yml`）
+## 主题配置（kratos-rebirth）
 
-主题 `hexo-theme-maple` 的主要功能开关：
+主题默认配置位于 `node_modules/hexo-theme-kratos-rebirth/_config.yml`。该文件在
+`npm install` / 重装时会被覆盖，因此**持久化定制请使用站点级覆盖文件**
+`_config.kratos-rebirth.yml`（Hexo 5+ 主题配置约定，与主题默认配置合并，不受重装影响）。
 
-- **导航**：`nav` 定义顶部菜单（Posts → `/archives`, Categories → `/category`, Tags → `/tag`）
-- **Favicon / Logo**：分别指向 `/favicon.png` 和 `/images/logo.svg`
-- **社交链接**：`links` 中配置了 GitHub 链接
-- **分析**：`google_analytics` / `baidu_analytics`（目前为空）
-- **功能插件**：
-  - `fancybox: true` — 图片灯箱
-  - `mathjax: true` — 数学公式渲染
-  - `echarts: true` — 图表支持
-  - `mermaid: true` — 流程图支持
-  - `busuanzi: true` — 不蒜子访问统计
-  - `giscus` — 评论系统（目前未配置）
-- **特效**：`maple` 配置枫叶飘落动画（`enable: true`, `count: 10`, `speed: 0.5`）
+主题的主要配置区块（顶层键）：
 
-> 如需调整主题外观或功能，修改 `themes/hexo-theme-maple/_config.yml`，**不要**直接修改主题目录内的模板文件（除非确需定制主题行为）。
+- **`nav`**：顶部导航菜单
+- **`search`**：站内搜索（Algolia 等）
+- **`image` / `viewerjs`**：图片与灯箱预览
+- **`pjax`**：无刷新页面切换
+- **`syntax_highlighter`**：代码高亮
+- **`sidebar`**：侧边栏
+- **`comments`**：评论系统
+- **`share` / `donate` / `copyright_notice`**：分享、打赏、版权声明
+- **`visit_count`**：访问统计
+- **`vendors`**：第三方 CDN 资源
+- **`additional_injections`**：自定义头部/底部注入
+
+> 修改主题外观或功能时，优先编辑站点级 `_config.kratos-rebirth.yml`；**不要**直接改
+> `node_modules/` 内的主题文件（会在重装后丢失）。
 
 ---
 
 ## 代码风格
 
-项目根目录下无 `.editorconfig`，但主题目录下存在：
+项目中目前**没有** `.editorconfig` 文件，但建议统一遵循以下风格（与主题及前端生态惯例一致）：
 
 ```ini
 root = true
@@ -267,7 +271,7 @@ trim_trailing_whitespace = true
 在对本项目进行修改前，请确认：
 
 1. [ ] 是否需要在 `source/_posts/` 下新增 Markdown 文件？
-2. [ ] 是否需要修改 `_config.yml`（站点级）或 `themes/hexo-theme-maple/_config.yml`（主题级）？
+2. [ ] 是否需要修改 `_config.yml`（站点级）或 `_config.kratos-rebirth.yml`（主题级覆盖）？
 3. [ ] 执行 `hexo clean && hexo generate` 是否能正常构建？
 4. [ ] 新增内容是否包含正确的 Front-matter（`title`、`date`、`tags`/`categories`）？
 5. [ ] 是否无意中将敏感信息提交到了 Git 仓库？

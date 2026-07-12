@@ -42,6 +42,58 @@ def validate_frontmatter(content: str) -> tuple[bool, str]:
     return True, ""
 
 
+def extract_markdown(content: str) -> str:
+    """从模型输出中提取真正的 Markdown（frontmatter + 正文）。
+
+    大模型常把整篇包在代码栅栏里（```` ```markdown ````，正文含三反引号代码块时外层
+    常用四反引号），或在 frontmatter 前加前导语（"好的，以下是文章…"）甚至一条孤立的
+    ``---`` 分隔线。直接拿原始输出校验 frontmatter 会误报。
+
+    策略（不解栅栏，避免非贪婪正则在内层代码块处提前截断）：
+
+    1. 定位**真正**的 frontmatter——第一对 ``---`` 之间含 ``title:`` 字段。
+       其前的前导语、孤立 ``---``、外层栅栏起始行都被自然跳过；
+    2. 仅当 frontmatter 之前确实存在外层栅栏起始行时，去掉文末**一根**栅栏线
+       （与开头配对），不误伤正文结尾自身的代码块。
+
+    找不到合法 frontmatter 时原样返回，交由 ``validate_frontmatter`` 报清晰错误。
+    """
+    text = content.strip()
+    if not text:
+        return text
+    lines = text.split("\n")
+    n = len(lines)
+
+    # 1) 定位 frontmatter：第一对 --- 之间含 title:
+    start = None
+    for i in range(n):
+        if lines[i].strip() != "---":
+            continue
+        for j in range(i + 1, n):
+            if lines[j].strip() == "---":
+                block = "\n".join(lines[i + 1 : j])
+                if re.search(r"^title:\s*\S+", block, re.MULTILINE):
+                    start = i
+                break
+        if start is not None:
+            break
+
+    if start is None:
+        return text  # 无合法 frontmatter，原样返回
+
+    kept = lines[start:]
+
+    # 2) frontmatter 之前有外层栅栏起始 → 去掉文末一根与之配对的栅栏线
+    opening_before = any(re.match(r"^\s*`{3,}", ln) for ln in lines[:start])
+    if opening_before:
+        while kept and not kept[-1].strip():
+            kept.pop()
+        if kept and re.fullmatch(r"`{3,}", kept[-1].strip()):
+            kept.pop()
+
+    return "\n".join(kept).strip()
+
+
 def validate_tags(content: str, min_tags: int = 2, max_tags: int = 3) -> tuple[bool, str]:
     """校验标签数量"""
     tags = re.findall(r"^  - (.+)$", content, re.MULTILINE)
@@ -266,12 +318,17 @@ def _resolve_hexo(blog_dir: Path) -> list[str] | None:
 
     npx = shutil.which("npx")
     if npx:
-        return [npx, "hexo"]
+        # --no-install：本地没有 hexo 时立即报错，绝不触发交互式安装提示（会读 stdin 挂死）
+        return [npx, "--no-install", "hexo"]
     return None
 
 
 def _run_hexo(blog_dir: Path, args: list[str], timeout: int = HEXO_TIMEOUT) -> tuple[bool, str]:
-    """在 ``blog_dir`` 下以子进程执行 hexo，捕获输出，带超时。无 shell、无注入。"""
+    """在 ``blog_dir`` 下以子进程执行 hexo，捕获输出，带超时。无 shell、无注入。
+
+    ``stdin=DEVNULL``：任何交互提示（npx 安装确认、deploy 的登录询问等）立即吃 EOF，
+    绝不阻塞等待输入——MCP 子进程没有可交互的 TTY。
+    """
     prefix = _resolve_hexo(blog_dir)
     if prefix is None:
         return False, "未找到 hexo：请在博客目录执行 `npm install`，或全局安装 `hexo-cli`"
@@ -286,6 +343,7 @@ def _run_hexo(blog_dir: Path, args: list[str], timeout: int = HEXO_TIMEOUT) -> t
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
+            stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired:
         return False, f"`{' '.join(cmd)}` 执行超时（>{timeout}s）"

@@ -35,3 +35,8 @@ build/
 !.ai-skills/pipeline-config.yml
 !.ai-skills/pipeline-executor.md
 !.ai-skills/skills-registry.md
+
+# MCP 端到端测试临时沙盒（勿入库）
+droneblog-aigen-test/
+droneblog-sandbox*/
+theme-fallback-test/

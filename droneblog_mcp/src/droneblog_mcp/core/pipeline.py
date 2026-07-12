@@ -9,6 +9,7 @@ from pathlib import Path
 from droneblog_mcp.core.generator import generate_article
 from droneblog_mcp.models.config import get_config
 from droneblog_mcp.utils.fs import (
+    extract_markdown,
     generate_slug,
     hexo_build,
     scan_sensitive_info,
@@ -109,7 +110,8 @@ def run_pipeline(
     try:
         # === 阶段 1-3: 需求分析 → Skill 识别 → AI 生成 ===
         result = generate_article(topic, category, tags, prompt, model)
-        content = result["content"]
+        # 清洗模型输出：剥代码栅栏、去前导语，定位真正的 frontmatter（跨模型鲁棒性）
+        content = extract_markdown(result["content"])
         for stage in ("analysis", "skill_match", "execute"):
             pipeline_result["pipeline_stages"][stage] = "ok"
 

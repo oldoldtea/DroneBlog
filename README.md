@@ -196,8 +196,9 @@ my_blog/
 │   ├── README.md            # MCP Server 说明
 │   └── USAGE.md             # 使用指南
 ├── bin/                     # 脚本工具
-│   ├── droneblog-pipeline.sh
-│   ├── generate-and-archive.sh
+│   ├── droneblog            # 轻量 CLI wrapper（stdio 调用 MCP Server）
+│   ├── droneblog-pipeline.sh  # 已迁移至 bin/droneblog（代理入口，保留兼容）
+│   ├── generate-and-archive.sh  # 已弃用，请改用 bin/droneblog 或 MCP 客户端
 │   └── setup-mcp-env.sh     # MCP 环境一键配置脚本
 ├── _config.yml              # 站点核心配置
 ├── package.json             # 项目依赖与脚本
@@ -212,12 +213,14 @@ my_blog/
 | 文件/目录 | 说明 |
 |-----------|------|
 | `AGENTS.md` | AI 助手工作指南（流水线、Skill 管理、安全规范等） |
+| `.trellis/` | Trellis 工作流规范（任务、spec、标准流程） |
 | `.ai-skills/` | AI Skill 存储目录（按需加载的领域知识文件） |
 | `.ai-pipeline.log` | AI 流水线执行日志（追加写，记录阶段状态与失败信息） |
 | `droneblog_mcp/` | MCP Server 源码（AI 驱动的博客管理工具） |
+| `bin/droneblog` | 轻量 CLI wrapper，通过 stdio 调用 MCP Server |
 | `bin/setup-mcp-env.sh` | MCP 环境一键配置脚本 |
 
-> 以上 AI 相关文件（除 `droneblog_mcp/` 源码外）均已被 `.gitignore` 排除，不纳入 Git 版本控制，也不参与 Hexo 静态构建。
+> `droneblog_mcp/` 源码与 `bin/` 脚本纳入 Git 版本控制；`.ai-skills/` 中仅流水线核心文件（`pipeline-config.yml`、`pipeline-executor.md`、`skills-registry.md`）纳入版本控制，`.ai-pipeline.log`、`.env` 等按 `.gitignore` 排除。
 
 ## ✍️ 文章规范（Front-matter）
 

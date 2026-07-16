@@ -280,39 +280,66 @@ trim_trailing_whitespace = true
 
 ## AI 工作流入口
 
-> 本项目采用**混合式流水线（Hybrid Pipeline）**架构。AI 执行任务的完整流程由以下文件协同驱动：
+> 本项目采用 **Trellis 规范工作流** 与 `droneblog_mcp` MCP Server 相结合的 AI 辅助架构。AI 助手执行有明确交付项的任务时，应遵循 Trellis 阶段（Plan → Execute → Finish），并通过 `droneblog_mcp` 工具完成实际动作；轻量或临时查询可经 `bin/droneblog` CLI wrapper 完成。
 
 ### 加载顺序
 
+在新会话中，AI 助手按以下顺序加载上下文与规范：
+
 ```
 AGENTS.md
-  → .ai-skills/pipeline-executor.md  （执行引擎规范）
-    → .ai-skills/pipeline-config.yml   （声明式流水线配置）
-      → .ai-skills/skills-registry.md  （Skill 注册表，按需）
+  → .trellis/workflow.md                （Trellis 标准工作流与任务系统）
+    → .trellis/spec/                     （包级规范与跨包通用指南）
+      → .ai-skills/pipeline-executor.md  （AI 流水线执行引擎规范）
+        → .ai-skills/pipeline-config.yml  （阶段定义、检查项、输出模板）
 ```
 
 ### 文件职责
 
-| 文件 | 职责 | 修改频率 |
+| 文件 / 目录 | 职责 | 修改频率 |
 |------|------|----------|
-| `AGENTS.md` | 项目知识、技术栈、目录结构、常用命令 | 低 |
-| `.ai-skills/pipeline-executor.md` | 执行引擎接口、日志规范、失败回滚触发器 | 极低 |
-| `.ai-skills/pipeline-config.yml` | 流水线阶段定义、检查项、输出模板、失败策略 | 中 |
-| `.ai-skills/skills-registry.md` | Skill 映射表、加载规则 | 中 |
-| `.githooks/*` | 本地 Git Hooks（提交/推送前校验） | 低 |
+| `AGENTS.md` | 项目概览、技术栈、目录结构、常用命令、AI 工作流入口 | 低 |
+| `.trellis/workflow.md` | Trellis 阶段、任务系统、spec 系统、提交规则 | 极低 |
+| `.trellis/spec/guides/index.md` | 跨包通用指南（提交规范、文档风格、安全基线、AI 加载顺序） | 低 |
+| `.trellis/spec/droneblog_mcp/ai-workflow.md` | `droneblog_mcp` 包级 AI 工作流指南（工具映射、内容标准、日志、禁止行为） | 低 |
+| `.trellis/task_templates/blog_post/` | 博客写作任务模板（`prd.md` / `implement.md`） | 低 |
+| `.ai-skills/pipeline-executor.md` | 流水线执行引擎接口、日志规范、失败回滚触发器 | 极低 |
+| `.ai-skills/pipeline-config.yml` | 流水线阶段定义、MCP 工具映射、检查项、输出模板、失败策略 | 中 |
+| `.ai-skills/skills-registry.md` | 本地 Skill 映射表、可选外部 Skill 搜索规则 | 中 |
+| `droneblog_mcp` | MCP Server，提供 15 Tools / 5 Resources / 3 Prompts，是主执行入口 | 中 |
+| `bin/droneblog` | 轻量 CLI wrapper，通过 stdio 调用 `droneblog_mcp`，辅助入口 | 低 |
 
 ### 关键规则
 
-- **不要代替用户执行 `git commit`、`git push` 或 `hexo deploy`**（除非用户明确要求部署）。默认只做到本地验证通过为止。
-- **所有 Git 提交操作必须使用 `@command:extension.showGitCommit` 工具执行**，不得直接使用 `git commit` 命令。
-- **提交信息必须使用简体汉字**，格式：`[分类] 简述修改内容`
+- **不要代替用户执行 `git commit`、`git push` 或 `hexo deploy`**（除非用户明确要求）。默认只做到本地验证通过为止。
+- **提交信息使用简体中文**，格式：`[分类] 简述修改内容`
   - 示例：`[文章] 新增 Kafka 源码解析文章`
   - 示例：`[配置] 调整首页分页为每页 20 篇`
+- 进行写博客、改配置、调主题等**有明确交付项**的工作前，建议先创建 Trellis task：
+  ```bash
+  python ./.trellis/scripts/task.py create "文章标题" --slug <short-name>
+  # 写博客可参考模板：.trellis/task_templates/blog_post/
+  ```
+- `.trellis/tasks/` 目录及任务产物本身被 `.gitignore` 排除，不参与博客构建；但沉淀的研究/决策记录应保留在任务目录的 `research/` 中。
 
 ### 流水线总览
 
 ```
-[ ] 1. 需求分析 → [ ] 2. Skill 识别 → [ ] 3. 执行流程 → [ ] 4. 安全审查 → [ ] 5. 输出规范
+[ ] 1. 需求分析 (analysis)
+  → [ ] 2. Skill 识别 (skill_match)
+    → [ ] 3. 执行流程 (execute)
+      → [ ] 4. 流程合规审核 (compliance_audit)
+        → [ ] 5. 安全审查 (security)
+          → [ ] 6. 输出规范 (output)
 ```
 
-各阶段的详细规则、检查项和失败策略定义在 `.ai-skills/pipeline-config.yml` 中。AI 应在读取本文件后，按该配置驱动执行。
+| 阶段 | MCP 工具 / 资源 | 说明 |
+|------|----------------|------|
+| `analysis` | `pipeline_run(task_type=...)` | 明确任务类型：`content_creation` / `config_change` / `theme_custom` / `debug_build` / `deploy` |
+| `skill_match` | `prompts/blog_writing`、`prompts/tech_analysis`、`prompts/blog_idea_generator` | 内置 Prompts 作为 skill |
+| `execute` | `blog_generate`、`blog_list`、`blog_read`、`blog_edit`、`blog_delete`、`config_get`、`config_set`、`build`、`deploy` | 实际执行内容或配置变更 |
+| `compliance_audit` | `pipeline_status` | 检查 `.ai-pipeline.log` 阶段信号是否完整 |
+| `security` | 内部 `scan_sensitive_info` | 扫描密钥、token、password 等敏感信息 |
+| `output` | 工具结果格式化 | 按 `.ai-skills/pipeline-config.yml` 输出模板汇报 |
+
+各阶段的详细规则、检查项和失败策略定义在 `.ai-skills/pipeline-config.yml` 中。AI 应在读取本文件后，按该配置驱动执行。若 `.ai-skills/pipeline-executor.md` 与 `AGENTS.md` 冲突，以 `pipeline-executor.md` 中的规则为准（按其自身声明的优先级），但应在执行中向用户说明差异。

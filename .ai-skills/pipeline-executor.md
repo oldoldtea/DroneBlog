@@ -1,10 +1,11 @@
 # Pipeline Executor — 系统级动作执行规范
 
-> **加载优先级**：MAXIMUM
-> **作用域**：本文件为系统级动作规范，AI 每次会话启动时必须首先加载，并将其中的规则置于最高优先级（仅次于用户直接指令）。
+> **加载优先级**：MAXIMUM（仅次于用户直接指令与 Trellis 任务生命周期规范）
+> **作用域**：本文件为系统级动作规范，AI 每次会话启动时必须首先加载，并将其中的规则置于最高优先级（仅次于用户直接指令与 `.trellis/workflow.md`）。
 > **生效方式**：本文件不是参考建议，而是**强制性动作指令**。AI 必须在每次与用户交互的完整任务周期内严格执行。
 > **依赖**：本文件依赖 `.ai-skills/pipeline-config.yml` 中的声明式配置。AI 应在读取本文件后，立即加载 `pipeline-config.yml` 作为执行蓝图。
 > **关键认知**：`.ai-skills/` 目录下的文件（包括本文件）**不会自动进入 AI 上下文**。AGENTS.md 中的「AI 工作流入口」章节已要求 AI 主动读取这些文件。如果 AI 未读取到本文件，则流水线机制无法生效——此时必须在首次回复中承认此遗漏。
+> **MCP 执行方式**：本文件中的阶段信号、日志写入、合规审核等动作，优先通过 `droneblog_mcp` 的 MCP 工具（`pipeline_run`、`pipeline_status` 等）完成；CLI 环境可通过 `bin/droneblog` 或 `droneblog-mcp` 命令调用；若两者均不可用，可使用 shell 命令回退。
 
 ---
 
@@ -33,6 +34,8 @@
   # Format: [ISO8601] [STATUS] [STAGE] Message
   ```
 - [ ] **S6. 状态就绪标记**：向用户展示 `[Pipeline Ready]` 标记（可在首次回复中隐含，不必单独发送）。
+
+> **审阅方式**：所有人工审阅在 MCP 客户端对话中完成；不存在"打开 nano 编辑器"的强制步骤。MCP 执行默认 `auto_confirm=true`，最终确认在客户端对话中完成。
 
 ### 0.3 自检失败的处理
 
@@ -79,8 +82,8 @@
 每当用户提交一个新任务，AI 必须按 `pipeline-config.yml` 中定义的 `stages` 顺序执行配套动作。
 
 动作分为两类：
-- **A 类（文件动作）**：必须调用 Shell 工具写入 `.ai-pipeline.log`
-- **B 类（输出动作）**：必须在回复文本中显式输出阶段标记
+- **A 类（文件动作）**：优先通过 MCP 工具或 `droneblog-mcp` CLI 写入 `.ai-pipeline.log`；若均不可用，使用 shell 回退。
+- **B 类（输出动作）**：必须在回复文本中显式输出阶段标记。
 
 ### 1.0 阶段间信号机制（Stage Gate Protocol）—— 最高优先级规则
 
@@ -98,7 +101,10 @@
 
 进入每个阶段前，AI 必须执行以下检查：
 
-1. **读取日志**：检查 `.ai-pipeline.log` 中是否存在上一阶段的 `[OK]` 信号
+1. **读取日志**：在 MCP 客户端中通过 `pipeline_status` 工具读取 `.ai-pipeline.log` 信号；在 CLI 中可执行 `droneblog-mcp pipeline_status` 或直接使用：
+   ```bash
+   grep "\[OK\] \[{prev_stage_id}\]" .ai-pipeline.log | tail -1
+   ```
 2. **信号存在**：正常进入当前阶段
 3. **信号缺失**：
    - 立即标记为 **流程违规**
@@ -128,12 +134,24 @@
 
 **阶段开始前——信号验证（强制）**：
 ```bash
-# 1. 检查上一阶段信号
+# 1. 在 MCP 客户端中调用 pipeline_status 工具读取上一阶段信号
+# 2. 或在 CLI 中执行：
 grep "\[OK\] \[{prev_stage_id}\]" .ai-pipeline.log | tail -1
-# 2. 若结果为空，触发流程合规审核
+# 3. 若结果为空，触发流程合规审核
 ```
 
 **A 类动作（日志）**：
+优先通过 MCP 工具写入；CLI 回退命令：
+```bash
+# 阶段开始
+droneblog-mcp pipeline_run --stage {stage.id} --status START --message "Pipeline started for task: {简述}"
+# 阶段成功完成
+droneblog-mcp pipeline_run --stage {stage.id} --status OK --message "{stage.name} completed"
+# 阶段失败
+droneblog-mcp pipeline_run --stage {stage.id} --status FAIL --message "{stage.name} failed: {原因}"
+```
+
+若无法调用 MCP/CLI，使用以下 shell 回退：
 ```bash
 echo "[YYYY-MM-DDTHH:mm:ss+08:00] [START] [{stage.id}] Pipeline started for task: {简述}" >> .ai-pipeline.log
 ```
@@ -233,6 +251,8 @@ echo "[YYYY-MM-DDTHH:mm:ss+08:00] [FAIL] [{stage.id}] {stage.name} failed: {原�
 - 换行符：LF (`\n`)
 
 #### 步骤 4：构建验证（build_verify）
+
+优先调用 MCP `build` 工具；CLI 回退命令：
 
 ```bash
 hexo clean && hexo generate
@@ -366,9 +386,9 @@ AI 必须在**内存中维护当前任务的失败计数器**（按子任务维�
 每完成一轮回复（即每次调用工具后向用户输出前），AI 必须自检以下 5 项：
 
 - [ ] **C1. 阶段标记检查**：本轮回复是否包含了当前阶段的 `[Pipeline] 阶段 n/N: {name}` 标记？
-- [ ] **C2. 日志写入检查**：如果本轮有文件操作或命令执行，是否已写入 `.ai-pipeline.log`？
+- [ ] **C2. 日志写入检查**：如果本轮有文件操作或命令执行，是否已写入 `.ai-pipeline.log`（或已通过 MCP 工具发送等价信号）？
 - [ ] **C3. 进度条检查**：本轮回复结尾是否包含了 `[Pipeline] 当前进度:` 进度条？
-- [ ] **C4. find-skills 强制触发检查**：如果当前任务处于 Skill 识别阶段且本地注册表未匹配，是否已执行 `npx skills find {关键词}`？（禁止主观跳过）
+- [ ] **C4. Skill 匹配检查**：若本地注册表未匹配且任务确实需要外部 Skill，可提示使用 `npx skills find {关键词}` 进行**可选**搜索；此步骤不强制，不触发流程违规。
 - [ ] **C5. 阶段间信号检查**：当前阶段开始前，是否验证了上一阶段的 `[OK]` 合规信号存在于 `.ai-pipeline.log` 中？
 
 **自检结果处理**：
@@ -377,7 +397,7 @@ AI 必须在**内存中维护当前任务的失败计数器**（按子任务维�
 |---------|---------|
 | 5 项全部通过 | 正常发送回复 |
 | 有遗漏项 | 在回复开头追加 `[Pipeline] ⚠️ 自检发现遗漏: {遗漏项说明}`，然后补输出缺失内容 |
-| 发现流程违规（如 C4/C5 失败） | 触发 **compliance_audit 阶段**，从违规阶段重新开始执行 |
+| 发现流程违规（如 C5 失败） | 触发 **compliance_audit 阶段**，从违规阶段重新开始执行 |
 
 ---
 
@@ -386,10 +406,11 @@ AI 必须在**内存中维护当前任务的失败计数器**（按子任务维�
 当本文件中的动作指令与其他规范冲突时，按以下优先级执行：
 
 1. **最高**：用户直接指令（如用户说"不要写日志"）
-2. **次高**：本文件中的动作指令（日志写入、阶段标记）
-3. **中等**：`pipeline-config.yml` 中的声明式配置
-4. **次低**：AGENTS.md 中的业务规范（安全审查、命名规范等）
-5. **最低**：已加载 Skill 中的约束
+2. **次高**：Trellis `.trellis/workflow.md` 任务生命周期规范（Plan → Execute → Finish）
+3. **次高**：本文件中的动作指令（日志写入、阶段标记）
+4. **中等**：`pipeline-config.yml` 中的声明式配置
+5. **次低**：AGENTS.md 中的业务规范（安全审查、命名规范等）
+6. **最低**：已加载 Skill 中的约束
 
 > **例外**：如果用户明确说"跳过流水线"或"不用管 AGENTS.md"，则暂停本文件的所有动作指令。
 
@@ -404,7 +425,6 @@ AI 在以下情况必须进行自检：
 - 完成一轮回复后，意识到本轮未写入日志
 - 用户质疑"为什么没有按照 AGENTS.md 执行"
 - **任何阶段开始前，未检测到上一阶段的 `[OK]` 合规信号**
-- **Skill 识别阶段未执行 find-skills 回退搜索（流程违规）**
 
 ### 6.2 补正动作
 
@@ -414,7 +434,7 @@ AI 在以下情况必须进行自检：
    ```
 2. **判断是否为流程违规**：
    - **一般遗漏**（如漏写一条日志、漏输出一个标记）：立即补执行遗漏的动作，继续后续流程
-   - **流程违规**（如跳过 find-skills、阶段信号缺失、未验证上一阶段信号）：
+   - **流程违规**（如跳过阶段信号验证、阶段信号缺失）：
      1. 写入日志：`[FAIL] [{stage}] 流程违规 detected: {reason}. 触发重新执行。`
      2. 输出：`[Pipeline] ⚠️ 流程合规审核检测到违规，正在从违规阶段重新执行...`
      3. **中止当前流水线**
@@ -434,7 +454,7 @@ AI 在以下情况必须进行自检：
 | `EXECUTOR_FILE` | `.ai-skills/pipeline-executor.md` | 本文件（执行引擎） |
 | `CONFIG_FILE` | `.ai-skills/pipeline-config.yml` | 声明式流水线配置 |
 | `REGISTRY_FILE` | `.ai-skills/skills-registry.md` | Skill 动态注册表 |
-| `HOOKS_DIR` | `.githooks/` | Git Hooks 脚本 |
+| `TRELLIS_WORKFLOW` | `.trellis/workflow.md` | Trellis 任务生命周期规范 |
 
 ---
 
@@ -453,7 +473,6 @@ compliance_audit 阶段在执行阶段（execute）完成后、安全审查（se
 2. **历史违规扫描**：
    - 扫描日志中是否存在以下违规模式：
      - `流程违规`
-     - `find-skills 回退搜索未执行`
      - `阶段标记未输出`
      - `日志未写入`
      - `未发送合规完成信号`
@@ -471,7 +490,7 @@ compliance_audit 阶段在执行阶段（execute）完成后、安全审查（se
 
 ### 8.4 重新执行流程
 
-1. 确定违规阶段（如 `skill_match` 未执行 find-skills）
+1. 确定违规阶段（如 `skill_match` 阶段信号缺失）
 2. 输出：`[Pipeline] ⚠️ 流程合规审核检测到违规，正在从 {stage_name} 阶段重新执行...`
 3. 回到违规阶段，清空该阶段及之后的所有临时状态
 4. 严格按照规范重新执行该阶段

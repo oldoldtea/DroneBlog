@@ -1,10 +1,44 @@
 # Pipeline Config — 声明式流水线配置
 # 本文件定义 AI 执行任务的阶段、检查项、失败策略和输出模板。
 # AI 应在加载 AGENTS.md 后读取本文件，并按此配置驱动执行流程。
+# 版本说明：v1.2 与 Trellis 工作流及 droneblog_mcp 工具对齐。
 
 pipeline:
-  version: "1.1"
-  description: "DroneBlog 混合式流水线配置"
+  version: "1.2"
+  description: "DroneBlog MCP 驱动流水线配置"
+
+  # --------------------------------------------------------------------------
+  # MCP 工具映射（MCP Tool Mapping）
+  # --------------------------------------------------------------------------
+  # 本表将 pipeline 的各阶段映射到 droneblog_mcp 提供的 Tools / Resources / Prompts。
+  mcp_tool_mapping:
+    analysis:
+      tool: pipeline_run
+      parameters:
+        task_type: "content_creation | config_change | theme_custom | debug_build | deploy"
+      note: "由 MCP pipeline_run 工具按任务类型触发需求分析"
+    skill_match:
+      resources:
+        - prompt: blog_writing
+        - prompt: tech_analysis
+        - prompt: blog_idea_generator
+      note: "MCP Prompts 作为内置 skill；外部 skill 通过 skills-registry.md 可选加载"
+    execute:
+      content_creation: [blog_generate, blog_list, blog_read, blog_edit, blog_delete]
+      config_change: [config_get, config_set]
+      build: build
+      deploy: deploy
+      note: "按任务类型调用对应 MCP 工具执行"
+    compliance_audit:
+      tool: pipeline_status
+      note: "读取 .ai-pipeline.log 阶段信号，验证阶段门"
+    security:
+      internal: scan_sensitive_info
+      source: droneblog_mcp/utils/fs.py
+      note: "复用 droneblog_mcp 内部敏感信息扫描"
+    output:
+      format: standard_report
+      note: "工具返回标准报告格式"
 
   # --------------------------------------------------------------------------
   # 阶段定义（Stage Definitions）
@@ -34,7 +68,7 @@ pipeline:
     - id: skill_match
       name: "Skill 识别"
       required: true
-      description: "根据任务关键词动态匹配并加载相关 Skill。匹配不到时强制执行 find-skills 回退搜索，禁止跳过"
+      description: "根据任务关键词动态匹配并加载相关 Skill。本地未匹配时可提示 find-skills 搜索，但不强制"
       registry: "skills-registry.md"
       checks:
         - type: keyword_extraction
@@ -45,11 +79,11 @@ pipeline:
           target: skills-registry.md
           description: "在本地注册表中查找匹配 Skill"
         - type: find_skills_fallback
-          condition: "local_registry_scan 未匹配"
+          condition: "local_registry_scan 未匹配且用户/任务需要外部 skill"
           action: run_command
           command: "npx skills find {keywords}"
-          description: "本地未匹配时，强制搜索 skills.sh 生态（不可跳过）"
-          required: true
+          description: "可选：本地未匹配时，可搜索 skills.sh 生态；不强制"
+          required: false
         - type: skill_load
           condition: "匹配到 Skill"
           action: read_skill_file
@@ -95,7 +129,9 @@ pipeline:
             - id: build_verify
               name: "构建验证"
               action: run_command
+              mcp_tool: build
               command: "hexo clean && hexo generate"
+              note: "优先使用 MCP build 工具；CLI 回退使用 hexo 命令"
 
         - id: config_change
           triggers: ["config_change"]
@@ -115,7 +151,9 @@ pipeline:
             - id: build_verify
               name: "构建验证"
               action: run_command
+              mcp_tool: build
               command: "hexo clean && hexo generate"
+              note: "优先使用 MCP build 工具；CLI 回退使用 hexo 命令"
 
         - id: theme_custom
           triggers: ["theme_custom"]
@@ -123,15 +161,18 @@ pipeline:
             - id: check_theme_config
               name: "优先检查主题配置"
               action: read_file
-              target: "themes/hexo-theme-maple/_config.yml"
+              target: "node_modules/hexo-theme-kratos-rebirth/_config.yml"
+              note: "站点级持久化覆盖请使用 _config.kratos-rebirth.yml"
             - id: modify_template
               name: "修改模板（如需）"
               action: modify_file
-              note: "定位 layout/ 下对应 EJS 文件"
+              note: "定位 node_modules/hexo-theme-kratos-rebirth/layout/ 下对应 EJS 文件；优先使用 _config.kratos-rebirth.yml"
             - id: build_verify
               name: "构建验证"
               action: run_command
+              mcp_tool: build
               command: "hexo generate"
+              note: "优先使用 MCP build 工具；CLI 回退使用 hexo 命令"
 
         - id: debug_build
           triggers: ["debug_build"]
@@ -139,7 +180,9 @@ pipeline:
             - id: clean_cache
               name: "清理缓存"
               action: run_command
+              mcp_tool: build
               command: "hexo clean"
+              note: "优先使用 MCP build 工具；CLI 回退使用 hexo clean"
             - id: check_logs
               name: "查看错误日志"
               action: run_command
@@ -150,7 +193,9 @@ pipeline:
             - id: rebuild_verify
               name: "修复后验证"
               action: run_command
+              mcp_tool: build
               command: "hexo generate"
+              note: "优先使用 MCP build 工具；CLI 回退使用 hexo 命令"
 
         - id: deploy
           triggers: ["deploy"]
@@ -161,7 +206,9 @@ pipeline:
             - id: build
               name: "执行构建"
               action: run_command
+              mcp_tool: build
               command: "hexo clean && hexo generate"
+              note: "优先使用 MCP build 工具；CLI 回退使用 hexo 命令"
             - id: local_preview
               name: "本地预览（可选）"
               action: run_command
@@ -170,8 +217,9 @@ pipeline:
             - id: deploy
               name: "执行部署"
               action: run_command
+              mcp_tool: deploy
               command: "hexo deploy"
-              note: "仅在用户明确要求时执行"
+              note: "仅在用户明确要求时执行；优先使用 MCP deploy 工具"
 
     - id: compliance_audit
       name: "流程合规审核"
@@ -188,9 +236,9 @@ pipeline:
           action: scan_patterns
           patterns:
             - "流程违规"
-            - "find-skills 回退搜索未执行"
             - "阶段标记未输出"
             - "日志未写入"
+            - "未发送合规完成信号"
           description: "扫描历史执行记录中是否存在已知的流程违规模式"
         - id: re_execute_on_violation
           name: "违规时重新执行"
@@ -247,9 +295,8 @@ pipeline:
         signal_format: "[OK] [skill_match] Skill 识别 completed"
         next_stage: execute
         special_rules:
-          - rule: "find_skills_fallback 强制触发"
-            description: "若本地注册表未匹配，必须执行 find-skills 回退搜索，并在日志中记录执行结果"
-            violation_action: "标记为流程违规，触发 compliance_audit 阶段"
+          - rule: "find_skills_fallback 可选"
+            description: "若本地注册表未匹配，可提示执行 find-skills 搜索；不作为强制步骤，不触发流程违规"
       - stage: execute
         signal_required: true
         signal_format: "[OK] [execute] 执行流程 completed"
@@ -337,17 +384,20 @@ pipeline:
         paths: ["source/_posts/"]
       - id: config
         prefix: "[配置]"
-        paths: ["_config.yml", "themes/*/ _config.yml"]
+        paths: ["_config.yml", "_config.kratos-rebirth.yml"]
       - id: theme
         prefix: "[主题]"
-        paths: ["themes/"]
+        paths: ["_config.kratos-rebirth.yml"]
       - id: docs
         prefix: "[文档]"
-        paths: ["README.md", "AGENTS.md"]
+        paths: ["README.md", "AGENTS.md", ".trellis/spec/"]
       - id: deps
         prefix: "[依赖]"
-        paths: ["package.json", "package-lock.json"]
+        paths: ["package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"]
       - id: fix
         prefix: "[修复]"
+        paths: []
+      - id: refactor
+        prefix: "[重构]"
         paths: []
     format: "{prefix} {description}"

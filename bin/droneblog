@@ -1,0 +1,560 @@
+#!/usr/bin/env python3
+"""DroneBlog CLI wrapper — 通过 stdio JSON-RPC 调用 droneblog-mcp。
+
+这是一个轻量 CLI wrapper，本身不实现 AI 生成或 Hexo 调用逻辑；所有实际工作
+都委托给 MCP Server 的 15 个工具。适用于不想打开 MCP 客户端、只想在命令行
+快速生成/构建/部署/查询的场景。
+
+用法示例:
+    bin/droneblog generate "C++20 协程" "后端开发" "C++,协程,异步编程"
+    bin/droneblog build
+    bin/droneblog deploy
+    bin/droneblog list
+    bin/droneblog read my-post-slug
+    bin/droneblog status
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import queue
+import shutil
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+VERSION = "1.0.0"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+DEFAULT_CATEGORY = "后端开发"
+VALID_CATEGORIES = [
+    "后端开发",
+    "前端技术",
+    "系统编程",
+    "云原生",
+    "人工智能",
+    "分布式系统",
+]
+
+# MCP stdio 协议使用行分隔 JSON-RPC，每条消息以换行符结束。
+JSONRPC_VERSION = "2.0"
+MCP_PROTOCOL_VERSION = "2024-11-05"
+
+
+def _find_mcp_executable(project_root: Path) -> str | None:
+    """定位 droneblog-mcp 可执行文件：优先 PATH，其次项目内虚拟环境。"""
+    exe = shutil.which("droneblog-mcp")
+    if exe:
+        return exe
+
+    if sys.platform == "win32":
+        candidates = [
+            project_root / ".venv" / "Scripts" / "droneblog-mcp.exe",
+            project_root / ".venv" / "Scripts" / "droneblog-mcp",
+        ]
+    else:
+        candidates = [project_root / ".venv" / "bin" / "droneblog-mcp"]
+
+    for cand in candidates:
+        if cand.exists():
+            return str(cand)
+    return None
+
+
+def _prepare_env(project_root: Path) -> dict[str, str]:
+    """准备传递给 MCP Server 的环境变量，兼容旧 OPENAI_API_KEY 写法。"""
+    env = os.environ.copy()
+
+    # 默认工作目录指向 wrapper 所在项目根目录，可被 DRONEBLOG_DIR 覆盖。
+    if not env.get("DRONEBLOG_DIR"):
+        env["DRONEBLOG_DIR"] = str(project_root)
+
+    # 兼容旧环境变量：OPENAI_API_KEY → DRONEBLOG_OPENAI_API_KEY
+    if env.get("OPENAI_API_KEY") and not env.get("DRONEBLOG_OPENAI_API_KEY"):
+        env["DRONEBLOG_OPENAI_API_KEY"] = env["OPENAI_API_KEY"]
+
+    # 兼容 GITHUB_TOKEN → DRONEBLOG_GITHUB_TOKEN
+    if env.get("GITHUB_TOKEN") and not env.get("DRONEBLOG_GITHUB_TOKEN"):
+        env["DRONEBLOG_GITHUB_TOKEN"] = env["GITHUB_TOKEN"]
+
+    # 避免 Windows 控制台代码页导致 JSON-RPC 中文乱码/解码失败
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUNBUFFERED", "1")
+
+    return env
+
+
+def _redact(value: str) -> str:
+    """对密钥类字符串进行脱敏显示。"""
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "***"
+    return value[:4] + "..." + value[-4:]
+
+
+class MCPClient:
+    """通过 stdio 与 droneblog-mcp 进行 JSON-RPC 通信的极简客户端。"""
+
+    def __init__(self, executable: str, env: dict[str, str]) -> None:
+        self.executable = executable
+        self.env = env
+        self._proc: subprocess.Popen | None = None
+        self._out_queue: queue.Queue[dict] = queue.Queue()
+        self._stdout_thread: threading.Thread | None = None
+        self._stderr_thread: threading.Thread | None = None
+
+    def __enter__(self) -> "MCPClient":
+        self._start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:  # noqa: ANN001
+        self._close()
+
+    def _start(self) -> None:
+        try:
+            self._proc = subprocess.Popen(
+                [self.executable, "serve", "--transport", "stdio"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=self.env,
+                text=True,
+                bufsize=1,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                f"找不到 MCP Server 可执行文件: {self.executable}\n"
+                "请先运行 bin/setup-mcp-env.sh 安装虚拟环境。"
+            ) from exc
+
+        self._stdout_thread = threading.Thread(target=self._stdout_reader, daemon=True)
+        self._stdout_thread.start()
+        self._stderr_thread = threading.Thread(target=self._stderr_reader, daemon=True)
+        self._stderr_thread.start()
+
+    def _stdout_reader(self) -> None:
+        try:
+            proc = self._proc
+            if proc is None or proc.stdout is None:
+                return
+            for line in proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    # 忽略非 JSON 行（理论上不应发生）
+                    continue
+                if isinstance(msg, dict):
+                    self._out_queue.put(msg)
+        except Exception:
+            # 读取线程遇到 EOF 或进程结束属正常情况
+            pass
+
+    def _stderr_reader(self) -> None:
+        try:
+            proc = self._proc
+            if proc is None or proc.stderr is None:
+                return
+            for line in proc.stderr:
+                sys.stderr.write(line)
+                sys.stderr.flush()
+        except Exception:
+            pass
+
+    def _send(self, msg: dict) -> None:
+        if self._proc is None or self._proc.stdin is None:
+            raise RuntimeError("MCP Server 尚未启动")
+        data = json.dumps(msg, ensure_ascii=False)
+        self._proc.stdin.write(data + "\n")
+        self._proc.stdin.flush()
+
+    def _recv(self, timeout: float, expected_id: int | None = None) -> dict | None:
+        """从 stdout 队列读取下一条 JSON-RPC 消息，可选匹配请求 ID。"""
+        deadline = time.time() + timeout
+        while True:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                return None
+            try:
+                msg = self._out_queue.get(timeout=min(remaining, 1.0))
+            except queue.Empty:
+                proc = self._proc
+                if proc is not None and proc.poll() is not None and proc.returncode != 0:
+                    raise RuntimeError(
+                        f"MCP Server 异常退出，返回码: {proc.returncode}"
+                    )
+                continue
+            if expected_id is not None and msg.get("id") != expected_id:
+                # 忽略不匹配的响应/通知，继续等待
+                continue
+            return msg
+
+    def initialize(self) -> dict:
+        """完成 initialize / initialized 握手。"""
+        init_req = {
+            "jsonrpc": JSONRPC_VERSION,
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": "droneblog-cli", "version": VERSION},
+            },
+        }
+        self._send(init_req)
+        response = self._recv(timeout=30, expected_id=1)
+        if response is None:
+            raise RuntimeError("MCP Server 初始化超时，请检查 DRONEBLOG_DIR 是否指向正确博客目录")
+        if "error" in response:
+            raise RuntimeError(f"MCP Server 初始化失败: {response['error']}")
+
+        self._send({"jsonrpc": JSONRPC_VERSION, "method": "notifications/initialized"})
+        return response.get("result", {})
+
+    def call_tool(self, name: str, arguments: dict) -> dict:
+        """调用指定 MCP Tool 并返回原始 result 字典。"""
+        request_id = 2
+        req = {
+            "jsonrpc": JSONRPC_VERSION,
+            "id": request_id,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        }
+        self._send(req)
+        response = self._recv(timeout=300, expected_id=request_id)
+        if response is None:
+            raise RuntimeError(f"调用工具 {name} 超时")
+        if "error" in response:
+            raise RuntimeError(f"工具调用失败: {response['error']}")
+        return response.get("result") or {}
+
+    def _close(self) -> None:
+        proc = self._proc
+        if proc is None:
+            return
+        try:
+            if proc.stdin:
+                proc.stdin.close()
+        except Exception:
+            pass
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+
+def _print_tool_result(result: dict, command: str) -> int:
+    """将工具返回的 JSON-RPC result 以人类可读格式输出。"""
+    if not result:
+        print("工具返回空结果")
+        return 1
+
+    if result.get("isError"):
+        print("工具执行出错:", file=sys.stderr)
+        for item in result.get("content", []):
+            if item.get("type") == "text":
+                print(item.get("text", ""), file=sys.stderr)
+        return 1
+
+    # FastMCP 对 Python dict/list 返回值会放进 structuredContent.result
+    structured = result.get("structuredContent")
+    if structured is not None and "result" in structured:
+        data = structured["result"]
+        if isinstance(data, dict):
+            return 1 if _print_dict_result(data, command) else 0
+        if isinstance(data, list):
+            _print_list_result(data, command)
+            return 0
+        print(data)
+        return 0
+
+    # 回退：解析 content 中的文本 JSON
+    contents = result.get("content", [])
+    exit_code = 0
+    for item in contents:
+        if item.get("type") != "text":
+            continue
+        text = item.get("text", "")
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            print(text)
+            continue
+
+        if isinstance(data, dict):
+            if _print_dict_result(data, command):
+                exit_code = 1
+        elif isinstance(data, list):
+            _print_list_result(data, command)
+        else:
+            print(data)
+
+    return exit_code
+
+
+def _status_label(status: str) -> str:
+    mapping = {
+        "success": "成功",
+        "fail": "失败",
+        "warning": "警告",
+    }
+    return mapping.get(status, status)
+
+
+def _print_dict_result(data: dict, command: str) -> bool:
+    """打印 dict 形式的工具结果，返回是否应使用非零退出码。"""
+    status = data.get("status")
+
+    if status is not None:
+        print(f"状态: {_status_label(status)}")
+        if status == "fail":
+            exit_code = True
+        else:
+            exit_code = False
+    else:
+        exit_code = False
+
+    if "message" in data:
+        print(data["message"])
+
+    if command == "read":
+        post = data.get("post", {})
+        if post:
+            print(f"标题: {post.get('title', '')}")
+            print(f"日期: {post.get('date', '')}")
+            print(f"标签: {', '.join(post.get('tags', []))}")
+            print(f"分类: {', '.join(post.get('categories', []))}")
+            print(f"字数: {post.get('word_count', 0)}")
+            print("-" * 40)
+            print(post.get("content", post.get("raw_content", "")))
+        return exit_code
+
+    if command == "status":
+        print(f"流水线就绪: {data.get('pipeline_ready', False)}")
+        stages = data.get("stages", {})
+        if stages:
+            print("各阶段状态:")
+            for stage, info in stages.items():
+                print(f"  [{info.get('status', '-')}] {stage}: {info.get('message', '')}")
+        logs = data.get("recent_logs", [])
+        if logs:
+            print("最近日志:")
+            for line in logs[:10]:
+                print(f"  {line}")
+        return exit_code
+
+    # 通用：打印其余字段
+    for key, value in data.items():
+        if key in ("status", "message"):
+            continue
+        if isinstance(value, (dict, list)):
+            print(f"{key}:")
+            print(json.dumps(value, ensure_ascii=False, indent=2))
+        else:
+            print(f"{key}: {value}")
+
+    return exit_code
+
+
+def _print_list_result(data: list, command: str) -> None:
+    """打印 list 形式的工具结果。"""
+    if command == "list":
+        if not data:
+            print("暂无文章")
+            return
+        print(f"共 {len(data)} 篇文章:")
+        for post in data:
+            print(
+                f"  - {post.get('title', '')} "
+                f"({post.get('date', '')}) "
+                f"[slug={post.get('slug', '')}] "
+                f"tags={post.get('tags', [])} "
+                f"categories={post.get('categories', [])}"
+            )
+    else:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def _split_tags(tags_str: str) -> list[str]:
+    if not tags_str:
+        return []
+    return [t.strip() for t in tags_str.split(",") if t.strip()]
+
+
+def _call_tool(command: str, arguments: dict) -> int:
+    """启动 MCP Server 并调用工具，返回程序退出码。"""
+    env = _prepare_env(PROJECT_ROOT)
+    exe = _find_mcp_executable(PROJECT_ROOT)
+    if not exe:
+        print(
+            "错误：未找到 droneblog-mcp 可执行文件。\n"
+            "请运行以下命令安装环境：\n"
+            "  bash:  bin/setup-mcp-env.sh\n"
+            "  python: python -m pip install -e droneblog_mcp/.[dev]",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        with MCPClient(exe, env) as client:
+            client.initialize()
+            result = client.call_tool(command, arguments)
+            return _print_tool_result(result, command)
+    except RuntimeError as exc:
+        print(f"错误: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"意外错误: {exc}", file=sys.stderr)
+        return 1
+
+
+def _cmd_generate(args: argparse.Namespace) -> int:
+    tags = _split_tags(getattr(args, "tags", "") or "")
+    if not tags:
+        print("错误: 请提供 2-3 个标签，多个标签用逗号分隔。", file=sys.stderr)
+        print(
+            f"示例: bin/droneblog generate '{args.topic}' '{args.category}' '标签1,标签2'",
+            file=sys.stderr,
+        )
+        return 2
+    if len(tags) < 2 or len(tags) > 3:
+        print(f"错误: 标签数量必须是 2-3 个，当前 {len(tags)} 个。", file=sys.stderr)
+        return 2
+    if args.category not in VALID_CATEGORIES:
+        print(
+            f"错误: 无效分类 '{args.category}'，可选: {', '.join(VALID_CATEGORIES)}",
+            file=sys.stderr,
+        )
+        return 2
+
+    arguments: dict = {
+        "topic": args.topic,
+        "category": args.category,
+        "tags": tags,
+        "auto_confirm": True,
+    }
+    if args.slug:
+        arguments["slug"] = args.slug
+    if args.prompt:
+        arguments["prompt"] = args.prompt
+    if args.model:
+        arguments["model"] = args.model
+    if args.auto_deploy:
+        arguments["auto_deploy"] = True
+
+    return _call_tool("blog_generate", arguments)
+
+
+def _cmd_build(args: argparse.Namespace) -> int:
+    return _call_tool("build", {"clean": not args.no_clean})
+
+
+def _cmd_deploy(args: argparse.Namespace) -> int:
+    return _call_tool("deploy", {"build_first": True})
+
+
+def _cmd_list(args: argparse.Namespace) -> int:
+    arguments: dict = {"limit": args.limit}
+    if args.category:
+        arguments["category"] = args.category
+    if args.tag:
+        arguments["tag"] = args.tag
+    if args.year is not None:
+        arguments["year"] = args.year
+    return _call_tool("blog_list", arguments)
+
+
+def _cmd_read(args: argparse.Namespace) -> int:
+    return _call_tool("blog_read", {"slug": args.slug, "include_raw": args.raw})
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    return _call_tool("pipeline_status", {})
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="droneblog",
+        description="DroneBlog CLI wrapper — 通过 stdio 调用 droneblog-mcp 工具。",
+        epilog="提示：所有 AI 生成/构建/部署逻辑均由 MCP Server 执行，wrapper 不重复实现。",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {VERSION}",
+    )
+
+    sub = parser.add_subparsers(dest="command", required=True, help="可用子命令")
+
+    # generate
+    gen = sub.add_parser("generate", help="生成一篇新博客文章")
+    gen.add_argument("topic", help="文章主题，如 'C++20 协程深度解析'")
+    gen.add_argument(
+        "category",
+        nargs="?",
+        default=DEFAULT_CATEGORY,
+        help=f"文章分类，默认 '{DEFAULT_CATEGORY}'",
+    )
+    gen.add_argument(
+        "tags",
+        nargs="?",
+        default="",
+        help="标签列表，2-3 个，用逗号分隔，如 'C++,协程,异步编程'",
+    )
+    gen.add_argument("--slug", default="", help="文章文件名（kebab-case，不含 .md）")
+    gen.add_argument("--prompt", default="", help="额外提示词")
+    gen.add_argument("--model", default=os.environ.get("DRONEBLOG_MODEL", ""), help="AI 模型")
+    gen.add_argument("--auto-deploy", action="store_true", help="生成后自动部署（需已配置 GitHub 绑定）")
+    gen.set_defaults(func=_cmd_generate)
+
+    # build
+    build = sub.add_parser("build", help="构建 Hexo 站点")
+    build.add_argument("--no-clean", action="store_true", help="跳过 hexo clean")
+    build.set_defaults(func=_cmd_build)
+
+    # deploy
+    deploy = sub.add_parser("deploy", help="部署到 GitHub Pages")
+    deploy.set_defaults(func=_cmd_deploy)
+
+    # list
+    list_p = sub.add_parser("list", help="列出博客文章")
+    list_p.add_argument("--limit", type=int, default=20, help="返回数量限制，默认 20")
+    list_p.add_argument("--category", help="按分类筛选")
+    list_p.add_argument("--tag", help="按标签筛选")
+    list_p.add_argument("--year", type=int, help="按年份筛选")
+    list_p.set_defaults(func=_cmd_list)
+
+    # read
+    read = sub.add_parser("read", help="读取单篇文章")
+    read.add_argument("slug", help="文章 slug（文件名，不含 .md）")
+    read.add_argument("--raw", action="store_true", help="包含原始 Markdown（含 Front-matter）")
+    read.set_defaults(func=_cmd_read)
+
+    # status
+    status = sub.add_parser("status", help="查看流水线状态")
+    status.set_defaults(func=_cmd_status)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

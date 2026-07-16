@@ -1,13 +1,13 @@
 # Skills Registry — Skill 动态注册表
 
 > 本文件面向 AI 编程助手。当任务涉及特定领域知识时，AI 应按本文件定义的流程进行动态 Skill 匹配。
-> 核心原则：**用户输入后立即提取关键词 → 本地注册表匹配 → 未匹配则 find-skills 搜索 → 无论结果如何都继续执行**。
+> 核心原则：**用户输入后立即提取关键词 → 本地注册表匹配 → 可提示 find-skills 搜索（可选） → 无论结果如何都继续执行**。
 
 ---
 
 ## 一、动态匹配流程（Dynamic Matching Pipeline）
 
-收到用户请求后，按以下顺序执行，**不可跳过任何步骤**：
+收到用户请求后，按以下顺序执行：
 
 ```
 [用户输入]
@@ -20,11 +20,11 @@
     │
     ├─ 匹配到 → [Step 4] 加载 Skill
     │
-    └─ 未匹配 → [Step 3] find-skills 回退搜索
+    └─ 未匹配 → [Step 3] 可选：find-skills 搜索
                     │
                     ├─ 搜索到 → [Step 4] 加载 Skill
                     │
-                    └─ 未搜索到 → [Step 5] 记录结果并继续
+                    └─ 未搜索到 → [Step 5] 记录并继续
     │
     ▼
 [Step 4] 加载 Skill（如匹配到）
@@ -33,9 +33,9 @@
 [Step 5] 输出匹配结果标记，进入后续阶段
 ```
 
-> **硬性规则**：
-> 1. **Step 3（find-skills 回退搜索）为强制步骤**：只要 Step 2 本地注册表未匹配到 Skill，**必须**执行 Step 3，不允许 AI 以「任务简单」「通用能力足够」等任何理由主观跳过。
-> 2. **即使 Step 2 和 Step 3 都未找到任何 Skill**，也必须执行 Step 5 输出「无匹配 Skill」标记，然后继续执行后续流水线阶段。**不允许因未匹配到 Skill 而阻塞或中断任务**。
+> **规则**：
+> 1. **Step 3（find-skills 搜索）为可选步骤**：本地未匹配时，AI 可提示使用 `npx skills find {关键词}` 搜索，但不强制。不得以未匹配为由阻塞任务。
+> 2. **无论是否匹配到 Skill**，都必须执行 Step 5 输出标记并继续执行。
 > 3. **阶段间信号验证**：Skill 识别阶段（skill_match）开始前，必须验证需求分析阶段（analysis）已发送 `[OK] [analysis]` 信号。若信号缺失，标记为流程违规，触发 compliance_audit 阶段重新执行。
 
 ---
@@ -71,43 +71,37 @@
 
 ## 三、本地 Skill 映射表（Local Skill Registry）
 
-以下 Skill 为当前环境已安装，**优先匹配**。匹配时按关键词相似度排序，取最相关的一项或多项。
+当前项目已安装的第三方 Skill 较少，以下列出**可选的通用 skill 工具**；若未安装，则视为无匹配。
 
 | 匹配关键词 | 推荐 Skill | 说明 | 优先级 |
 |-----------|-----------|------|--------|
-| React 组件设计、组合模式、props 清理、compound components | `vercel-composition-patterns` | React 组合模式最佳实践 | P1 |
-| React/Next.js 性能优化、数据获取、Bundle 优化、RSC | `vercel-react-best-practices` | React 最佳实践 | P1 |
-| React Native、Expo、移动端开发、iOS/Android | `vercel-react-native-skills` | React Native 技能 | P1 |
-| UI 审查、可访问性、a11y、UX 规范、设计系统 | `web-design-guidelines` | Web 设计指南 | P1 |
-| 找 skill、发现 skill、有没有 skill、skill 搜索 | `find-skills` | 发现可用 skill（仅在用户主动询问时使用） | P2 |
-| 创建 skill、新 skill、skill 开发、扩展 AI 能力 | `skill-creator` | Skill 创建指南 | P2 |
-| DOCX、Word 文档、.docx 处理 | `anthropics-docx` | DOCX 创建、编辑和分析 | P1 |
+| 找 skill、发现 skill、有没有 skill、skill 搜索 | `find-skills` | 发现可用 skill（仅在用户主动询问或确有必要时可选使用） | P2 |
+| 创建 skill、新 skill、skill 开发、扩展 AI 能力 | `skill-creator` | Skill 创建指南（可选） | P2 |
 
-> **注意**：此表仅为「已安装 Skill」的子集。如果用户请求涉及的技术领域不在上表中，**必须执行 Step 3 的 find-skills 回退搜索**。
+> **DroneBlog 内置能力**：本项目的 `droneblog_mcp` MCP Server 提供 `blog_writing`、`tech_analysis`、`blog_idea_generator` 等 Prompts，可直接作为 skill 使用，无需额外安装。
 
 ---
 
-## 四、find-skills 回退机制（Fallback Search）
+## 四、find-skills 回退机制（Fallback Search，可选）
 
-### 4.1 触发条件（强制）
+### 4.1 触发条件
 
-满足以下任一条件时**必须触发**，无例外：
-- Step 2（本地注册表匹配）**未找到**任何匹配的 Skill
-- 用户请求涉及的技术领域**明显超出**本地注册表覆盖范围
-- 用户**明确要求**查找某个领域的 Skill
+满足以下任一条件时可触发：
+- Step 2（本地注册表匹配）未找到任何匹配的 Skill，且用户希望搜索外部 skill
+- 用户明确要求查找某个领域的 Skill
 
-> ⚠️ **禁止行为**：AI 不得因「任务简单」「通用能力足够」「节省时间」等任何理由跳过本步骤。
+> 说明：DroneBlog 不依赖外部 skills.sh 生态，`npx skills find` 仅作为可选搜索。
 
 ### 4.2 执行流程
 
 ```bash
-# 使用提取的关键词作为查询词
+# 使用提取的关键词作为查询词（可选）
 npx skills find {关键词}
 ```
 
 **示例**：
-- 用户说 "帮我写个 Terraform 配置" → 本地无匹配 → 执行 `npx skills find terraform`
-- 用户说 "有没有 skill 能帮我做代码审查" → 执行 `npx skills find code review`
+- 用户说 "帮我写个 Terraform 配置" → 本地无匹配 → 可提示 `npx skills find terraform`
+- 用户说 "有没有 skill 能帮我做代码审查" → 可提示 `npx skills find code review`
 
 ### 4.3 结果处理
 
@@ -116,33 +110,6 @@ npx skills find {关键词}
 | 找到相关 Skill | 向用户展示推荐列表（名称 + 说明 + 安装命令），询问是否加载 |
 | 未找到相关 Skill | 输出 `[Skill Match] 未在本地注册表和 skills.sh 生态中找到匹配 Skill`，直接继续执行 |
 | 命令执行失败（如网络问题） | 输出 `[Skill Match] find-skills 搜索失败（{原因}），将使用通用能力继续执行` |
-| **AI 违规跳过** | 记录为 `[FAIL] [skill_match] find-skills 回退搜索未执行 (流程违规)`，触发 compliance_audit 阶段，从 skill_match 阶段重新开始执行 |
-
-### 4.5 违规重新执行流程（Compliance Re-execution）
-
-当检测到 find-skills 回退搜索被违规跳过时：
-
-1. **立即停止当前所有操作**
-2. **写入违规日志**：
-   ```
-   [YYYY-MM-DDTHH:mm:ss+08:00] [FAIL] [skill_match] 流程违规: find-skills 回退搜索未执行
-   [YYYY-MM-DDTHH:mm:ss+08:00] [START] [compliance_audit] 流程合规审核 started
-   [YYYY-MM-DDTHH:mm:ss+08:00] [OK] [compliance_audit] 流程合规审核 completed: 检测到 skill_match 阶段违规，触发重新执行
-   ```
-3. **输出违规通知**：
-   ```
-   [Pipeline] ⚠️ 流程合规审核检测到违规
-   [Pipeline] 违规类型: find-skills 回退搜索未执行（强制性步骤被跳过）
-   [Pipeline] 违规阶段: Skill 识别
-   [Pipeline] 正在从违规阶段重新执行...
-   ```
-4. **回到 skill_match 阶段重新执行**：
-   - 重新提取关键词
-   - 重新扫描本地注册表
-   - **强制执行 find-skills 回退搜索**
-   - 记录搜索结果
-5. **重新执行后必须通过 compliance_audit 验证**
-6. **重新执行次数上限**：2 次。超过仍违规则终止任务
 
 ### 4.4 用户确认规则
 
@@ -156,9 +123,9 @@ npx skills find {关键词}
 
 ### 5.1 加载执行
 
-确认加载后，读取对应 `SKILL.md` 文件路径：
-- User-scope skills：`/home/lz/.claude/skills/{skill-name}/SKILL.md`
-- Built-in skills：`/home/lz/.local/share/uv/tools/kimi-cli/lib/python3.13/site-packages/kimi_cli/skills/{skill-name}/SKILL.md`
+确认加载后，读取对应 `SKILL.md` 文件路径。实际路径取决于当前 MCP 客户端或环境：
+- User-scope skills：`~/.claude/skills/{skill-name}/SKILL.md`（或当前 MCP 客户端的 skills 目录）
+- Built-in skills：`{kimi-cli 安装路径}/kimi_cli/skills/{skill-name}/SKILL.md`（如适用）
 
 ### 5.2 上下文标记
 
@@ -208,4 +175,4 @@ npx skills find {关键词}
 | 日志 / 监控 / 可观测性 | `observability`, `monitoring`, `logging` |
 | 文档 / README / 变更日志 | `documentation`, `readme`, `changelog` |
 
-> 上表仅作参考。实际执行时以 Step 2 提取的关键词为准。
+> 上表仅作参考。实际执行时以 Step 2 提取的关键词为准，`find-skills` 搜索为可选。

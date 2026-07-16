@@ -32,6 +32,7 @@ build/
 !.env.example
 
 # AI 流水线配置（纳入版本控制）
+.ai-skills/
 !.ai-skills/pipeline-config.yml
 !.ai-skills/pipeline-executor.md
 !.ai-skills/skills-registry.md
@@ -41,3 +42,10 @@ droneblog-aigen-test/
 droneblog-sandbox*/
 droneblog-launch-test/
 theme-fallback-test/
+
+# 本地 IDE / 编辑器配置
+.claude/
+.cursor/
+
+# Trellis 本地工作区日志（任务产物本身已纳入版本控制）
+.trellis/workspace/

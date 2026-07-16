@@ -1,0 +1,5 @@
+{"file": "AGENTS.md", "reason": "项目权威规范：技术栈、目录结构、主题、提交规范、AI 工作流入口"}
+{"file": ".trellis/workflow.md", "reason": "Trellis 官方流程：spec 系统、任务生命周期、阶段契约、提交规则"}
+{"file": ".ai-skills/pipeline-config.yml", "reason": "现有流水线配置，用于在 ai-workflow.md 中引用阶段定义和检查项"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/prd.md", "reason": "父任务 PRD：本任务在整体升级中的定位与验收标准"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/design.md", "reason": "父任务设计：spec 层在架构中的位置与与其他子任务的关系"}

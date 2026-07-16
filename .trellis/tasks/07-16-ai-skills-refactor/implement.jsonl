@@ -1,0 +1,7 @@
+{"file": "AGENTS.md", "reason": "项目权威规范：AI 工作流入口、主题信息、提交规范、安全约束"}
+{"file": ".trellis/workflow.md", "reason": "Trellis 阶段与任务系统，确保重构后的流水线与 Trellis 兼容"}
+{"file": ".ai-skills/pipeline-config.yml", "reason": "待重构的主要文件：阶段定义、任务类型、检查项"}
+{"file": ".ai-skills/pipeline-executor.md", "reason": "待重构的主要文件：系统级执行规范、Stage Gate 协议"}
+{"file": ".ai-skills/skills-registry.md", "reason": "待重构的主要文件：本地 skill 表与 find-skills 回退"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/prd.md", "reason": "父任务 PRD：本任务在整体升级中的定位"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/design.md", "reason": "父任务设计：MCP 主入口、工具映射、执行顺序"}

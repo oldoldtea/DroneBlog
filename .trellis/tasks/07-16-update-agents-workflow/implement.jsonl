@@ -1,0 +1,8 @@
+{"file": "AGENTS.md", "reason": "待修改文件本身：需精确重写「AI 工作流入口」章节"}
+{"file": ".trellis/workflow.md", "reason": "Trellis 标准工作流描述，用于在 AGENTS.md 中引用"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/prd.md", "reason": "父任务 PRD：AGENTS.md 更新的目标与范围"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/design.md", "reason": "父任务设计：四层架构与文件关系"}
+{"file": ".ai-skills/pipeline-config.yml", "reason": "更新后的流水线阶段定义，AGENTS.md 需与其一致"}
+{"file": ".ai-skills/pipeline-executor.md", "reason": "更新后的执行规范，AGENTS.md 需说明其优先级"}
+{"file": ".trellis/spec/guides/index.md", "reason": "新增 spec 层入口，AGENTS.md 需引用"}
+{"file": ".trellis/spec/droneblog_mcp/ai-workflow.md", "reason": "新增 AI 工作流规范，AGENTS.md 需引用"}

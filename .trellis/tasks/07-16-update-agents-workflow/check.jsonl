@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/prd.md", "reason": "检查 AGENTS.md 更新是否满足父任务验收标准"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/implement.md", "reason": "检查变更范围是否最小化"}
+{"file": "AGENTS.md", "reason": "检查修改后的 AGENTS.md 是否删除不存在引用、是否自洽"}

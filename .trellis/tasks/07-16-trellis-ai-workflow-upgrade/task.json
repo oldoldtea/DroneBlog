@@ -1,0 +1,31 @@
+{
+  "id": "trellis-ai-workflow-upgrade",
+  "name": "trellis-ai-workflow-upgrade",
+  "title": "架构级升级：按 Trellis 规范重构 DroneBlog AI 工作流",
+  "description": "",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "your-name",
+  "assignee": "your-name",
+  "createdAt": "2026-07-16",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev-mcp-hardening",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-16-spec-layer",
+    "07-16-ai-skills-refactor",
+    "07-16-unify-cli-mcp",
+    "07-16-update-agents-workflow"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

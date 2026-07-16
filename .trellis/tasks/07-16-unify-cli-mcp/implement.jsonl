@@ -1,0 +1,5 @@
+{"file": "AGENTS.md", "reason": "项目权威规范：安全传参、AI 工作流入口、主题信息"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/prd.md", "reason": "父任务 PRD：CLI/MCP 入口统一的要求"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/design.md", "reason": "父任务设计：架构前后对比、MCP tool 映射"}
+{"file": "droneblog_mcp/src/droneblog_mcp/server.py", "reason": "MCP tools/resources/prompts 的权威列表，用于 wrapper 子命令映射"}
+{"file": "droneblog_mcp/src/droneblog_mcp/__main__.py", "reason": "CLI 入口和 serve 命令参数"}

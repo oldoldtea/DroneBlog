@@ -1,0 +1,4 @@
+{"file": "AGENTS.md", "reason": "检查 spec 内容是否与项目权威规范冲突"}
+{"file": ".trellis/workflow.md", "reason": "检查 spec 索引格式是否符合 Trellis spec 系统要求"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/prd.md", "reason": "对照父任务验收标准检查交付完整性"}
+{"file": ".trellis/tasks/07-16-trellis-ai-workflow-upgrade/implement.md", "reason": "检查执行顺序与风险点是否被覆盖"}
